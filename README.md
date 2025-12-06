@@ -1,36 +1,195 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cafe Cursor Toronto - Next.js
 
-## Getting Started
+A modern event registration system for Cafe Cursor Toronto, built with Next.js 15, Supabase, and Resend. Features automatic coupon code distribution to registered attendees via email.
 
-First, run the development server:
+## Features
+
+### Public Features
+- **Event Registration** - Simple registration form at `/register`
+- **Automatic Coupon Assignment** - Registrants receive an available coupon code
+- **Email Notification** - Coupon codes delivered via Resend immediately
+
+### Admin Features
+- **Dashboard** - Overview of registrations and coupon distribution
+- **Attendee Management** - Search, filter, and manage registered attendees
+- **Coupon Management** - Create, edit, delete, and track coupon codes
+- **Email Operations** - Send/resend coupon emails to attendees
+- **Bulk Import** - Import multiple coupon codes at once
+- **CSV Export** - Export attendee data
+
+## Tech Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth
+- **UI Components**: shadcn/ui
+- **Styling**: Tailwind CSS v4
+- **Email**: Resend
+- **Hosting**: Vercel
+
+## Prerequisites
+
+- Node.js 18.x or higher
+- npm or yarn
+- Supabase account
+- Resend account
+
+## Setup
+
+### 1. Clone and Install
+
+```bash
+cd cafe-cursor-toronto-nextjs
+npm install
+```
+
+### 2. Environment Variables
+
+Copy the example environment file and fill in your values:
+
+```bash
+cp env.example .env.local
+```
+
+Required variables:
+- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (for admin operations)
+- `RESEND_API_KEY` - Your Resend API key
+- `NEXT_PUBLIC_APP_URL` - Your app URL (http://localhost:3000 for dev)
+
+### 3. Database Setup
+
+Run the SQL schema in your Supabase SQL Editor:
+
+```bash
+# The schema is in supabase-schema.sql
+```
+
+This creates:
+- `coupon_codes` table
+- `attendees` table
+- Row Level Security policies
+- Indexes and triggers
+
+### 4. Create Admin User
+
+Create an admin user in Supabase Authentication:
+1. Go to your Supabase Dashboard → Authentication → Users
+2. Click "Add user" → "Create new user"
+3. Enter email and password
+4. Use these credentials to log in at `/login`
+
+### 5. Resend Configuration
+
+1. Sign up at [resend.com](https://resend.com)
+2. Get your API key from the dashboard
+3. Verify your sending domain (optional for production)
+4. Update the `from` address in `src/lib/emails/send-coupon-email.ts`
+
+### 6. Run Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit:
+- `http://localhost:3000` - Redirects to registration
+- `http://localhost:3000/register` - Public registration form
+- `http://localhost:3000/login` - Admin login
+- `http://localhost:3000/admin/dashboard` - Admin dashboard
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/
+│   ├── api/
+│   │   ├── admin/
+│   │   │   ├── assign-coupon/
+│   │   │   └── send-email/
+│   │   ├── auth/
+│   │   │   └── logout/
+│   │   └── register/
+│   ├── admin/
+│   │   ├── attendees/
+│   │   ├── coupons/
+│   │   ├── dashboard/
+│   │   └── layout.tsx
+│   ├── login/
+│   └── register/
+├── components/
+│   ├── admin/
+│   │   ├── attendee-management.tsx
+│   │   ├── coupon-management.tsx
+│   │   ├── header.tsx
+│   │   ├── recent-attendees-table.tsx
+│   │   └── sidebar.tsx
+│   └── ui/
+│       └── (shadcn components)
+├── lib/
+│   ├── emails/
+│   │   ├── coupon-email.ts
+│   │   └── send-coupon-email.ts
+│   ├── supabase/
+│   │   ├── client.ts
+│   │   ├── middleware.ts
+│   │   └── server.ts
+│   ├── resend.ts
+│   └── utils.ts
+├── types/
+│   └── database.ts
+└── middleware.ts
+```
 
-## Learn More
+## Deployment to Vercel
 
-To learn more about Next.js, take a look at the following resources:
+### 1. Push to GitHub
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+git add .
+git commit -m "Initial commit"
+git push origin main
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Connect to Vercel
 
-## Deploy on Vercel
+1. Go to [vercel.com](https://vercel.com)
+2. Import your GitHub repository
+3. Configure environment variables
+4. Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 3. Update Supabase
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Add your Vercel URL to Supabase:
+1. Go to Authentication → URL Configuration
+2. Add your Vercel URL to the redirect URLs
+
+## Development
+
+### Adding New Components
+
+```bash
+npx shadcn@latest add [component-name]
+```
+
+### Type Generation (Optional)
+
+Generate TypeScript types from your Supabase schema:
+
+```bash
+npx supabase gen types typescript --project-id your-project-id > src/types/database.ts
+```
+
+## Migration from Laravel
+
+This project is a conversion from a Laravel/Livewire application. Key changes:
+- Laravel Fortify → Supabase Auth
+- Eloquent ORM → Supabase JS Client
+- Livewire/Flux UI → React + shadcn/ui
+- Laravel Queue + Mailgun → Direct Resend API
+- SQLite → Supabase PostgreSQL
+
+## License
+
+Proprietary software developed for Cafe Cursor Toronto.
