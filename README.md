@@ -181,15 +181,6 @@ Generate TypeScript types from your Supabase schema:
 npx supabase gen types typescript --project-id your-project-id > src/types/database.ts
 ```
 
-## Migration from Laravel
-
-This project is a conversion from a Laravel/Livewire application. Key changes:
-- Laravel Fortify → Supabase Auth
-- Eloquent ORM → Supabase JS Client
-- Livewire/Flux UI → React + shadcn/ui
-- Laravel Queue + Mailgun → Direct Resend API
-- SQLite → Supabase PostgreSQL
-
 ## License
 
 Proprietary software developed for Cafe Cursor Toronto.
