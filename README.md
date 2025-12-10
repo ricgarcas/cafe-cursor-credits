@@ -50,7 +50,7 @@ A modern event registration and coupon distribution system for Cafe Cursor commu
 ### 1. Clone and Install
 
 ```bash
-cd cafe-cursor-toronto-nextjs
+cd cafe-cursor-credits
 npm install
 ```
 
