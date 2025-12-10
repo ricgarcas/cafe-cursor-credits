@@ -20,7 +20,6 @@ import type { AppSettings } from '@/types/database'
 const settingsSchema = z.object({
   city_name: z.string().min(1, 'City name is required').max(255),
   timezone: z.string().min(1, 'Timezone is required'),
-  luma_api_key: z.string().nullable().optional(),
   resend_api_key: z.string().nullable().optional(),
 })
 
@@ -96,7 +95,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [timezoneOpen, setTimezoneOpen] = useState(false)
-  const [showLumaKey, setShowLumaKey] = useState(false)
   const [showResendKey, setShowResendKey] = useState(false)
 
   const form = useForm<SettingsFormData>({
@@ -104,7 +102,6 @@ export default function SettingsPage() {
     defaultValues: {
       city_name: '',
       timezone: 'America/Toronto',
-      luma_api_key: '',
       resend_api_key: '',
     },
   })
@@ -119,7 +116,6 @@ export default function SettingsPage() {
           form.reset({
             city_name: settings.city_name,
             timezone: settings.timezone,
-            luma_api_key: settings.luma_api_key || '',
             resend_api_key: settings.resend_api_key || '',
           })
         }
@@ -310,52 +306,6 @@ export default function SettingsPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="luma_api_key"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Luma API Key</FormLabel>
-                    <div className="relative">
-                      <FormControl>
-                        <Input
-                          type={showLumaKey ? 'text' : 'password'}
-                          placeholder="Enter your Luma API key"
-                          {...field}
-                          value={field.value || ''}
-                          className="pr-10"
-                        />
-                      </FormControl>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowLumaKey(!showLumaKey)}
-                      >
-                        {showLumaKey ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                    </div>
-                    <FormDescription>
-                      Required for syncing guests from Luma events.{' '}
-                      <a 
-                        href="https://lu.ma/settings/api-keys" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        Get your API key from Luma
-                      </a>
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               <FormField
                 control={form.control}
                 name="resend_api_key"
