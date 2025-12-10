@@ -77,6 +77,8 @@ export interface Database {
           code: string
           is_used: boolean
           used_at: string | null
+          used_by_type: 'attendee' | 'luma_guest' | null
+          used_by_luma_guest_id: string | null
           created_at: string
           updated_at: string
         }
@@ -85,6 +87,8 @@ export interface Database {
           code: string
           is_used?: boolean
           used_at?: string | null
+          used_by_type?: 'attendee' | 'luma_guest' | null
+          used_by_luma_guest_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -93,10 +97,20 @@ export interface Database {
           code?: string
           is_used?: boolean
           used_at?: string | null
+          used_by_type?: 'attendee' | 'luma_guest' | null
+          used_by_luma_guest_id?: string | null
           created_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "coupon_codes_used_by_luma_guest_id_fkey"
+            columns: ["used_by_luma_guest_id"]
+            isOneToOne: false
+            referencedRelation: "luma_guests"
+            referencedColumns: ["luma_guest_id"]
+          }
+        ]
       }
       luma_events: {
         Row: {
@@ -174,6 +188,8 @@ export interface Database {
           attendance_status: string | null
           registered_at: string | null
           synced_at: string | null
+          coupon_code_id: number | null
+          email_sent_at: string | null
           created_at: string
           updated_at: string
         }
@@ -189,6 +205,8 @@ export interface Database {
           attendance_status?: string | null
           registered_at?: string | null
           synced_at?: string | null
+          coupon_code_id?: number | null
+          email_sent_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -204,6 +222,8 @@ export interface Database {
           attendance_status?: string | null
           registered_at?: string | null
           synced_at?: string | null
+          coupon_code_id?: number | null
+          email_sent_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -214,6 +234,13 @@ export interface Database {
             isOneToOne: false
             referencedRelation: "luma_events"
             referencedColumns: ["luma_event_id"]
+          },
+          {
+            foreignKeyName: "luma_guests_coupon_code_id_fkey"
+            columns: ["coupon_code_id"]
+            isOneToOne: false
+            referencedRelation: "coupon_codes"
+            referencedColumns: ["id"]
           }
         ]
       }
@@ -352,7 +379,7 @@ export type LumaGuestWithEvent = LumaGuestRow & {
 }
 
 export type LumaGuestWithCoupon = LumaGuestRow & {
-  attendees: (Attendee & { coupon_codes: CouponCode | null }) | null
+  coupon_codes: CouponCode | null
 }
 
 // App Settings convenience types

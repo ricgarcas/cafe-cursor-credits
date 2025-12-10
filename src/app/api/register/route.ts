@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         name,
         email: email.toLowerCase(),
         registered_at: new Date().toISOString(),
+        source: 'website',
       })
       .select()
       .single()
@@ -84,12 +85,13 @@ export async function POST(request: NextRequest) {
         .eq('id', attendee.id)
 
       if (!updateAttendeeError) {
-        // Mark the coupon as used
+        // Mark the coupon as used with tracking info
         const { error: updateCouponError } = await supabase
           .from('coupon_codes')
           .update({
             is_used: true,
             used_at: new Date().toISOString(),
+            used_by_type: 'attendee',
           })
           .eq('id', couponCode.id)
 

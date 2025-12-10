@@ -1,8 +1,5 @@
-import { Resend } from 'resend'
 import { createAdminClient } from '@/lib/supabase/server'
-import { createLumaService, LumaService } from './service'
-import { createResendClient } from '@/lib/resend'
-import { sendCouponEmail } from '@/lib/emails/send-coupon-email'
+import { createLumaService } from './service'
 import { LumaEvent, LumaGuest } from '@/types/luma'
 import { AppSettings } from '@/types/database'
 
@@ -11,13 +8,10 @@ interface SyncResult {
   guestsSynced: number
   guestsAdded: number
   guestsUpdated: number
-  couponsAssigned: number
   errors: string[]
 }
 
 interface SyncOptions {
-  assignCoupons?: boolean
-  sendEmails?: boolean
   status?: 'confirmed' | 'waitlist' | 'declined' | 'cancelled'
 }
 
@@ -45,13 +39,14 @@ export async function getConfiguredEventId(): Promise<string | null> {
 
 /**
  * Sync guests from the configured Luma event
+ * This ONLY syncs guest data - coupon assignment and emails are handled separately
  * If eventId is not provided, fetches from app_settings
  */
 export async function syncLumaGuests(
   eventId?: string,
   options: SyncOptions = {}
 ): Promise<SyncResult> {
-  const { assignCoupons = true, sendEmails = true, status = 'confirmed' } = options
+  const { status = 'confirmed' } = options
   
   const supabase = await createAdminClient()
   
@@ -60,7 +55,6 @@ export async function syncLumaGuests(
     guestsSynced: 0,
     guestsAdded: 0,
     guestsUpdated: 0,
-    couponsAssigned: 0,
     errors: [],
   }
 
@@ -86,15 +80,8 @@ export async function syncLumaGuests(
     }
   }
 
-  // Create services with database-stored API keys
+  // Create Luma service with database-stored API key
   const luma = createLumaService(settings.luma_api_key)
-  let resendClient: Resend | null = null
-  
-  if (sendEmails && settings.resend_api_key) {
-    resendClient = createResendClient(settings.resend_api_key)
-  } else if (sendEmails && !settings.resend_api_key) {
-    console.warn('Resend API key not configured. Emails will not be sent.')
-  }
 
   // Create sync log entry
   const { data: syncLog } = await supabase
@@ -129,20 +116,6 @@ export async function syncLumaGuests(
             result.guestsAdded++
           } else {
             result.guestsUpdated++
-          }
-
-          // Assign coupon if enabled and guest is confirmed
-          if (assignCoupons && guest.registration_status === 'confirmed') {
-            const couponAssigned = await assignCouponToGuest(
-              supabase, 
-              guest, 
-              targetEventId, 
-              resendClient,
-              settings.city_name
-            )
-            if (couponAssigned) {
-              result.couponsAssigned++
-            }
           }
         } catch (error) {
           result.errors.push(
@@ -179,7 +152,7 @@ export async function syncLumaGuests(
         guests_synced: result.guestsSynced,
         guests_added: result.guestsAdded,
         guests_updated: result.guestsUpdated,
-        coupons_assigned: result.couponsAssigned,
+        coupons_assigned: 0, // No longer assigning during sync
         error_message: result.errors.length > 0 ? result.errors.join('; ') : null,
         completed_at: new Date().toISOString(),
       })
@@ -224,6 +197,7 @@ async function upsertLumaEvent(
 /**
  * Upsert a Luma guest to the database
  * Returns true if guest was newly created
+ * Does NOT assign coupons or send emails - that's done separately via the admin UI
  */
 async function upsertLumaGuest(
   supabase: Awaited<ReturnType<typeof createAdminClient>>,
@@ -261,119 +235,4 @@ async function upsertLumaGuest(
   }
 
   return isNew
-}
-
-/**
- * Assign a coupon to a Luma guest
- * Returns true if a new coupon was assigned
- */
-async function assignCouponToGuest(
-  supabase: Awaited<ReturnType<typeof createAdminClient>>,
-  guest: LumaGuest,
-  eventId: string,
-  resendClient: Resend | null,
-  cityName: string
-): Promise<boolean> {
-  const email = guest.email.toLowerCase()
-
-  // Check if attendee already exists with this email
-  const { data: existingAttendee } = await supabase
-    .from('attendees')
-    .select('id, coupon_code_id')
-    .eq('email', email)
-    .single()
-
-  if (existingAttendee?.coupon_code_id) {
-    // Already has a coupon assigned
-    return false
-  }
-
-  // Find an available coupon
-  const { data: couponCode, error: couponError } = await supabase
-    .from('coupon_codes')
-    .select()
-    .eq('is_used', false)
-    .is('used_at', null)
-    .limit(1)
-    .single()
-
-  if (couponError || !couponCode) {
-    console.warn('No available coupon codes')
-    return false
-  }
-
-  if (existingAttendee) {
-    // Update existing attendee with coupon and Luma references
-    const { error: updateError } = await supabase
-      .from('attendees')
-      .update({
-        coupon_code_id: couponCode.id,
-        luma_guest_id: guest.id,
-        luma_event_id: eventId,
-        source: 'luma' as const,
-      })
-      .eq('id', existingAttendee.id)
-
-    if (updateError) {
-      throw new Error(`Failed to update attendee: ${updateError.message}`)
-    }
-  } else {
-    // Create new attendee
-    const { error: insertError } = await supabase
-      .from('attendees')
-      .insert({
-        name: guest.name,
-        email: email,
-        coupon_code_id: couponCode.id,
-        luma_guest_id: guest.id,
-        luma_event_id: eventId,
-        source: 'luma' as const,
-        registered_at: guest.created_at,
-      })
-
-    if (insertError) {
-      throw new Error(`Failed to create attendee: ${insertError.message}`)
-    }
-  }
-
-  // Mark coupon as used
-  const { error: couponUpdateError } = await supabase
-    .from('coupon_codes')
-    .update({
-      is_used: true,
-      used_at: new Date().toISOString(),
-    })
-    .eq('id', couponCode.id)
-
-  if (couponUpdateError) {
-    throw new Error(`Failed to mark coupon as used: ${couponUpdateError.message}`)
-  }
-
-  // Send email notification if Resend client is available
-  if (resendClient) {
-    try {
-      await sendCouponEmail({
-        resendClient,
-        attendee: {
-          id: existingAttendee?.id || 0,
-          name: guest.name,
-          email: email,
-          coupon_code_id: couponCode.id,
-          registered_at: guest.created_at,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          luma_guest_id: guest.id,
-          luma_event_id: eventId,
-          source: 'luma' as const,
-        },
-        couponCode,
-        fromName: `Cafe Cursor ${cityName}`,
-      })
-    } catch (emailError) {
-      console.error('Failed to send coupon email:', emailError)
-      // Don't fail the sync if email fails
-    }
-  }
-
-  return true
 }

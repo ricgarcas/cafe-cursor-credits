@@ -321,6 +321,7 @@ export function CouponManagement() {
                 <TableRow className="border-zinc-800 hover:bg-transparent">
                   <TableHead className="text-zinc-400">Code</TableHead>
                   <TableHead className="text-zinc-400">Status</TableHead>
+                  <TableHead className="text-zinc-400">Source</TableHead>
                   <TableHead className="text-zinc-400">Used At</TableHead>
                   <TableHead className="text-zinc-400">Created</TableHead>
                   <TableHead className="text-zinc-400 text-right">Actions</TableHead>
@@ -339,6 +340,19 @@ export function CouponManagement() {
                         <Badge variant="outline" className="bg-blue-950/50 text-blue-400 border-blue-800">
                           Available
                         </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {coupon.used_by_type === 'luma_guest' ? (
+                        <Badge variant="outline" className="bg-purple-950/50 text-purple-400 border-purple-800">
+                          Luma
+                        </Badge>
+                      ) : coupon.used_by_type === 'attendee' ? (
+                        <Badge variant="outline" className="bg-amber-950/50 text-amber-400 border-amber-800">
+                          Attendee
+                        </Badge>
+                      ) : (
+                        <span className="text-zinc-500">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-zinc-500">

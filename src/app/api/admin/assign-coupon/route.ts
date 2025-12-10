@@ -66,12 +66,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to assign coupon' }, { status: 500 })
     }
 
-    // Mark coupon as used
+    // Mark coupon as used with tracking info
     const { error: updateCouponError } = await adminClient
       .from('coupon_codes')
       .update({
         is_used: true,
         used_at: new Date().toISOString(),
+        used_by_type: 'attendee',
       })
       .eq('id', couponCode.id)
 

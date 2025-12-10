@@ -4,8 +4,6 @@ import { z } from 'zod'
 
 const syncGuestsSchema = z.object({
   eventId: z.string().optional(), // Optional - will use settings if not provided
-  assignCoupons: z.boolean().optional().default(true),
-  sendEmails: z.boolean().optional().default(true),
   status: z.enum(['confirmed', 'waitlist', 'declined', 'cancelled']).optional(),
 })
 
@@ -21,13 +19,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { eventId, assignCoupons, sendEmails, status } = validation.data
+    const { eventId, status } = validation.data
 
-    const result = await syncLumaGuests(eventId, {
-      assignCoupons,
-      sendEmails,
-      status,
-    })
+    const result = await syncLumaGuests(eventId, { status })
 
     return NextResponse.json(result)
   } catch (error) {
