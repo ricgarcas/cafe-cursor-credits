@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -15,9 +15,26 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [cityName, setCityName] = useState('Cafe Cursor')
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/admin/dashboard'
+
+  // Fetch city name from settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings/public')
+        if (response.ok) {
+          const settings = await response.json()
+          setCityName(settings.city_name)
+        }
+      } catch (error) {
+        console.error('Failed to fetch settings:', error)
+      }
+    }
+    fetchSettings()
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,7 +86,8 @@ export default function LoginPage() {
 
         {/* Title */}
         <h1 className="text-4xl md:text-5xl font-normal text-white text-center leading-tighter tracking-tight mb-4">
-          Cafe Cursor <br /> Toronto
+          Cafe Cursor
+          <span className="block">{cityName}</span>
         </h1>
 
         {/* Card */}

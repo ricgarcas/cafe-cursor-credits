@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -28,6 +28,23 @@ export default function RegisterPage() {
   const [result, setResult] = useState<RegistrationResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [cityName, setCityName] = useState('Cafe Cursor')
+
+  // Fetch city name from settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings/public')
+        if (response.ok) {
+          const settings = await response.json()
+          setCityName(settings.city_name)
+        }
+      } catch (error) {
+        console.error('Failed to fetch settings:', error)
+      }
+    }
+    fetchSettings()
+  }, [])
 
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -100,7 +117,8 @@ export default function RegisterPage() {
 
         {/* Title */}
         <h1 className="text-4xl md:text-5xl font-normal text-white text-center leading-tighter tracking-tight mb-4">
-          Cafe Cursor <br /> Toronto
+          Cafe Cursor
+          <span className="block">{cityName}</span>
         </h1>
 
         {/* Card */}
@@ -112,7 +130,7 @@ export default function RegisterPage() {
                   <CheckCircle className="h-4 w-4 text-emerald-400" />
                   <AlertTitle className="text-emerald-100">Registration Successful!</AlertTitle>
                   <AlertDescription className="text-emerald-200/80">
-                    Thank you for registering for Cafe Cursor Toronto.
+                    Thank you for registering for Cafe Cursor {cityName}.
                     {result.couponAssigned && (
                       <span className="block mt-2">
                         Please check your email for your coupon code.

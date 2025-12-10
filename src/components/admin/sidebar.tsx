@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, Ticket, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, Ticket, LogOut, Calendar, Settings } from 'lucide-react'
 import { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,8 @@ const navigation = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   { name: 'Attendees', href: '/admin/attendees', icon: Users },
   { name: 'Coupons', href: '/admin/coupons', icon: Ticket },
+  { name: 'Luma Events', href: '/admin/luma', icon: Calendar },
+  { name: 'Settings', href: '/admin/settings', icon: Settings },
 ]
 
 interface AdminSidebarProps {
