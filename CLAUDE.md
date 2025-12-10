@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Event registration system for managing attendee registrations and distributing coupon codes via email. Single-city-per-deployment architecture with optional Luma event integration.
+Event registration system for managing attendee registrations and distributing coupon codes via email. Single-city-per-deployment architecture.
 
 ## Tech Stack
 
@@ -10,7 +10,6 @@ Event registration system for managing attendee registrations and distributing c
 - Supabase (PostgreSQL) for database and authentication
 - shadcn/ui components with Tailwind CSS v4
 - Resend for email delivery
-- Luma API for event integration
 - Zod for schema validation
 
 ## Quick Commands
@@ -93,39 +92,19 @@ if (settings?.resend_api_key) {
 }
 ```
 
-### Luma Integration
-
-Luma guests are kept separate from regular attendees. Sync only imports guest data; coupon assignment and emails are manual.
-
-```typescript
-import { syncLumaGuests } from '@/lib/luma/sync'
-
-// Sync only imports guest data to luma_guests table
-const result = await syncLumaGuests(eventId, { status: 'confirmed' })
-```
-
-For coupon assignment and emails, use the dedicated endpoints:
-- `POST /api/admin/luma/guests/assign-coupon` - Assign coupon to Luma guest
-- `POST /api/admin/luma/guests/send-email` - Send email to Luma guest with coupon
-
 ## File Organization
 
 - `src/app/` - Pages and API routes
-- `src/app/api/admin/luma/guests/` - Luma guest management endpoints
 - `src/components/ui/` - shadcn/ui components (don't modify)
 - `src/components/admin/` - Admin components
-- `src/lib/luma/` - Luma API integration
 - `src/lib/emails/` - Email templates
 - `src/types/` - TypeScript types
 
 ## Database Tables
 
 - `attendees` - Website/manual registrations with coupon assignments
-- `coupon_codes` - Coupon inventory with `used_by_type` (attendee/luma_guest) tracking
+- `coupon_codes` - Coupon inventory
 - `app_settings` - City configuration (singleton)
-- `luma_events` - Synced Luma events
-- `luma_guests` - Synced Luma guests with `coupon_code_id` and `email_sent_at`
-- `luma_sync_logs` - Sync history
 
 ## Authentication
 
@@ -142,7 +121,7 @@ Required:
 - `ADMIN_REGISTRATION_SECRET`
 - `NEXT_PUBLIC_APP_URL`
 
-API keys (Luma, Resend) are stored in `app_settings` table and configured via admin Settings page.
+Resend API key is stored in `app_settings` table and configured via admin Settings page.
 
 ## Best Practices
 

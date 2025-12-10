@@ -15,26 +15,18 @@ Event registration and coupon distribution system for Cafe Cursor community even
 - **Email Resend** - Resend coupon emails if needed
 - **Settings** - Configure city, timezone, and API keys
 
-### Luma Integration (Optional)
-- Connect Luma account via API key
-- Sync confirmed guests from your event
-- Manual coupon assignment per guest
-- Send emails individually or resend as needed
-
 ## Tech Stack
 
 - Next.js 15 (App Router) with TypeScript
 - Supabase (PostgreSQL + Auth)
 - shadcn/ui + Tailwind CSS v4
 - Resend for emails
-- Luma API for event sync
 
 ## Prerequisites
 
 - Node.js 18+
 - Supabase account
 - Resend account (free: 3,000 emails/month)
-- Luma Plus subscription (optional)
 
 ## Setup
 
@@ -81,7 +73,6 @@ npm run dev
 | `/admin/dashboard` | Admin dashboard |
 | `/admin/attendees` | Attendee management |
 | `/admin/coupons` | Coupon management |
-| `/admin/luma` | Luma event sync |
 | `/admin/settings` | City and API configuration |
 
 ## Project Structure
@@ -92,11 +83,6 @@ src/
 │   ├── api/
 │   │   ├── admin/
 │   │   │   ├── assign-coupon/
-│   │   │   ├── luma/
-│   │   │   │   ├── events/
-│   │   │   │   ├── guests/
-│   │   │   │   ├── sync-guests/
-│   │   │   │   └── test-connection/
 │   │   │   ├── send-email/
 │   │   │   └── settings/
 │   │   ├── register/
@@ -107,20 +93,9 @@ src/
 │   └── ui/
 ├── lib/
 │   ├── emails/
-│   ├── luma/
 │   └── supabase/
 └── types/
 ```
-
-## Luma Workflow
-
-1. Add Luma API key in Settings
-2. Go to Luma page, connect your event
-3. Click "Sync Guests" to import guest list
-4. For each guest: Assign Coupon → Send Email
-5. Filter by status to track progress
-
-Luma guests are kept separate from regular attendees. Coupon management shows source (Attendee/Luma).
 
 ## Deployment
 
