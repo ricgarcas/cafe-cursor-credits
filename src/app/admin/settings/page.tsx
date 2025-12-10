@@ -12,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Loader2, Save, Settings, Sparkles, Check, ChevronsUpDown } from 'lucide-react'
+import { Loader2, Save, Settings, Sparkles, Check, ChevronsUpDown, Eye, EyeOff, Key } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { AppSettings } from '@/types/database'
@@ -20,6 +20,8 @@ import type { AppSettings } from '@/types/database'
 const settingsSchema = z.object({
   city_name: z.string().min(1, 'City name is required').max(255),
   timezone: z.string().min(1, 'Timezone is required'),
+  luma_api_key: z.string().nullable().optional(),
+  resend_api_key: z.string().nullable().optional(),
 })
 
 type SettingsFormData = z.infer<typeof settingsSchema>
@@ -94,12 +96,16 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [timezoneOpen, setTimezoneOpen] = useState(false)
+  const [showLumaKey, setShowLumaKey] = useState(false)
+  const [showResendKey, setShowResendKey] = useState(false)
 
   const form = useForm<SettingsFormData>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
       city_name: '',
       timezone: 'America/Toronto',
+      luma_api_key: '',
+      resend_api_key: '',
     },
   })
 
@@ -113,6 +119,8 @@ export default function SettingsPage() {
           form.reset({
             city_name: settings.city_name,
             timezone: settings.timezone,
+            luma_api_key: settings.luma_api_key || '',
+            resend_api_key: settings.resend_api_key || '',
           })
         }
       } catch (error) {
@@ -279,6 +287,115 @@ export default function SettingsPage() {
                     </Popover>
                     <FormDescription>
                       Used for date and time formatting throughout the app
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5" />
+            Integrations
+          </CardTitle>
+          <CardDescription>
+            Configure API keys for external services
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="luma_api_key"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Luma API Key</FormLabel>
+                    <div className="relative">
+                      <FormControl>
+                        <Input
+                          type={showLumaKey ? 'text' : 'password'}
+                          placeholder="Enter your Luma API key"
+                          {...field}
+                          value={field.value || ''}
+                          className="pr-10"
+                        />
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowLumaKey(!showLumaKey)}
+                      >
+                        {showLumaKey ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                    <FormDescription>
+                      Required for syncing guests from Luma events.{' '}
+                      <a 
+                        href="https://lu.ma/settings/api-keys" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Get your API key from Luma
+                      </a>
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="resend_api_key"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Resend API Key</FormLabel>
+                    <div className="relative">
+                      <FormControl>
+                        <Input
+                          type={showResendKey ? 'text' : 'password'}
+                          placeholder="Enter your Resend API key"
+                          {...field}
+                          value={field.value || ''}
+                          className="pr-10"
+                        />
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowResendKey(!showResendKey)}
+                      >
+                        {showResendKey ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                    <FormDescription>
+                      Required for sending coupon code emails.{' '}
+                      <a 
+                        href="https://resend.com/api-keys" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Get your API key from Resend
+                      </a>
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

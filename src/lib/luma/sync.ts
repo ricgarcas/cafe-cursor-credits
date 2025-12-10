@@ -1,7 +1,10 @@
+import { Resend } from 'resend'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getLumaService } from './service'
+import { createLumaService, LumaService } from './service'
+import { createResendClient } from '@/lib/resend'
 import { sendCouponEmail } from '@/lib/emails/send-coupon-email'
 import { LumaEvent, LumaGuest } from '@/types/luma'
+import { AppSettings } from '@/types/database'
 
 interface SyncResult {
   success: boolean
@@ -19,50 +22,37 @@ interface SyncOptions {
 }
 
 /**
- * Sync events from Luma calendar to local database
+ * Get app settings including API keys from database
  */
-export async function syncLumaEvents(): Promise<{
-  success: boolean
-  eventsSynced: number
-  errors: string[]
-}> {
-  const luma = getLumaService()
+export async function getAppSettings(): Promise<AppSettings | null> {
   const supabase = await createAdminClient()
-  const errors: string[] = []
-  let eventsSynced = 0
-
-  try {
-    const events = await luma.getAllCalendarEvents()
-
-    for (const event of events) {
-      try {
-        await upsertLumaEvent(supabase, event)
-        eventsSynced++
-      } catch (error) {
-        errors.push(`Failed to sync event ${event.api_id}: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      }
-    }
-
-    return { success: errors.length === 0, eventsSynced, errors }
-  } catch (error) {
-    return {
-      success: false,
-      eventsSynced: 0,
-      errors: [error instanceof Error ? error.message : 'Failed to fetch events'],
-    }
-  }
+  const { data: settings } = await supabase
+    .from('app_settings')
+    .select('*')
+    .limit(1)
+    .single()
+  
+  return settings ?? null
 }
 
 /**
- * Sync guests for a specific event
+ * Get the configured Luma event ID from app_settings
+ */
+export async function getConfiguredEventId(): Promise<string | null> {
+  const settings = await getAppSettings()
+  return settings?.luma_event_id ?? null
+}
+
+/**
+ * Sync guests from the configured Luma event
+ * If eventId is not provided, fetches from app_settings
  */
 export async function syncLumaGuests(
-  eventId: string,
+  eventId?: string,
   options: SyncOptions = {}
 ): Promise<SyncResult> {
   const { assignCoupons = true, sendEmails = true, status = 'confirmed' } = options
   
-  const luma = getLumaService()
   const supabase = await createAdminClient()
   
   const result: SyncResult = {
@@ -74,11 +64,43 @@ export async function syncLumaGuests(
     errors: [],
   }
 
+  // Get settings including API keys
+  const settings = await getAppSettings()
+  
+  if (!settings?.luma_api_key) {
+    return {
+      ...result,
+      success: false,
+      errors: ['Luma API key not configured. Please set it in Settings.'],
+    }
+  }
+
+  // Get event ID from settings if not provided
+  const targetEventId = eventId || settings.luma_event_id
+  
+  if (!targetEventId) {
+    return {
+      ...result,
+      success: false,
+      errors: ['No Luma event configured. Please set a Luma event ID in settings.'],
+    }
+  }
+
+  // Create services with database-stored API keys
+  const luma = createLumaService(settings.luma_api_key)
+  let resendClient: Resend | null = null
+  
+  if (sendEmails && settings.resend_api_key) {
+    resendClient = createResendClient(settings.resend_api_key)
+  } else if (sendEmails && !settings.resend_api_key) {
+    console.warn('Resend API key not configured. Emails will not be sent.')
+  }
+
   // Create sync log entry
   const { data: syncLog } = await supabase
     .from('luma_sync_logs')
     .insert({
-      luma_event_id: eventId,
+      luma_event_id: targetEventId,
       sync_type: 'manual' as const,
       status: 'started' as const,
     })
@@ -87,11 +109,11 @@ export async function syncLumaGuests(
 
   try {
     // Ensure event exists locally
-    const event = await luma.getEvent(eventId)
+    const event = await luma.getEvent(targetEventId)
     await upsertLumaEvent(supabase, event)
 
     // Fetch guests from Luma
-    const guests = await luma.getAllEventGuests(eventId, status)
+    const guests = await luma.getAllEventGuests(targetEventId, status)
     result.guestsSynced = guests.length
 
     // Process guests in batches to avoid overwhelming the database
@@ -101,7 +123,7 @@ export async function syncLumaGuests(
       
       for (const guest of batch) {
         try {
-          const isNew = await upsertLumaGuest(supabase, eventId, guest)
+          const isNew = await upsertLumaGuest(supabase, targetEventId, guest)
           
           if (isNew) {
             result.guestsAdded++
@@ -111,7 +133,13 @@ export async function syncLumaGuests(
 
           // Assign coupon if enabled and guest is confirmed
           if (assignCoupons && guest.registration_status === 'confirmed') {
-            const couponAssigned = await assignCouponToGuest(supabase, guest, eventId, sendEmails)
+            const couponAssigned = await assignCouponToGuest(
+              supabase, 
+              guest, 
+              targetEventId, 
+              resendClient,
+              settings.city_name
+            )
             if (couponAssigned) {
               result.couponsAssigned++
             }
@@ -133,7 +161,7 @@ export async function syncLumaGuests(
     await supabase
       .from('luma_events')
       .update({ last_synced_at: new Date().toISOString() })
-      .eq('luma_event_id', eventId)
+      .eq('luma_event_id', targetEventId)
 
     result.success = result.errors.length === 0
 
@@ -243,7 +271,8 @@ async function assignCouponToGuest(
   supabase: Awaited<ReturnType<typeof createAdminClient>>,
   guest: LumaGuest,
   eventId: string,
-  sendEmail: boolean
+  resendClient: Resend | null,
+  cityName: string
 ): Promise<boolean> {
   const email = guest.email.toLowerCase()
 
@@ -320,10 +349,11 @@ async function assignCouponToGuest(
     throw new Error(`Failed to mark coupon as used: ${couponUpdateError.message}`)
   }
 
-  // Send email notification
-  if (sendEmail) {
+  // Send email notification if Resend client is available
+  if (resendClient) {
     try {
       await sendCouponEmail({
+        resendClient,
         attendee: {
           id: existingAttendee?.id || 0,
           name: guest.name,
@@ -337,6 +367,7 @@ async function assignCouponToGuest(
           source: 'luma' as const,
         },
         couponCode,
+        fromName: `Cafe Cursor ${cityName}`,
       })
     } catch (emailError) {
       console.error('Failed to send coupon email:', emailError)
@@ -346,4 +377,3 @@ async function assignCouponToGuest(
 
   return true
 }
-

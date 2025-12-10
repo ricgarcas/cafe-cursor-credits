@@ -275,6 +275,9 @@ export interface Database {
           id: number
           city_name: string
           timezone: string
+          luma_event_id: string | null
+          luma_api_key: string | null
+          resend_api_key: string | null
           created_at: string
           updated_at: string
         }
@@ -282,6 +285,9 @@ export interface Database {
           id?: never
           city_name?: string
           timezone?: string
+          luma_event_id?: string | null
+          luma_api_key?: string | null
+          resend_api_key?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -289,6 +295,9 @@ export interface Database {
           id?: never
           city_name?: string
           timezone?: string
+          luma_event_id?: string | null
+          luma_api_key?: string | null
+          resend_api_key?: string | null
           created_at?: string
           updated_at?: string
         }

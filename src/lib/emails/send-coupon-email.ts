@@ -1,16 +1,23 @@
-import { resend } from '@/lib/resend'
+import { Resend } from 'resend'
 import { renderCouponEmail } from './coupon-email'
 import { Attendee, CouponCode } from '@/types/database'
 
 interface SendCouponEmailParams {
+  resendClient: Resend
   attendee: Attendee
   couponCode: CouponCode
+  fromName?: string
 }
 
-export async function sendCouponEmail({ attendee, couponCode }: SendCouponEmailParams) {
+export async function sendCouponEmail({ 
+  resendClient, 
+  attendee, 
+  couponCode,
+  fromName = 'Cafe Cursor'
+}: SendCouponEmailParams) {
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'Cafe Cursor Toronto <onboarding@resend.dev>',
+    const { data, error } = await resendClient.emails.send({
+      from: `${fromName} <onboarding@resend.dev>`,
       to: attendee.email,
       subject: 'Your Cursor Coupon Code!',
       html: renderCouponEmail({ attendee, couponCode }),

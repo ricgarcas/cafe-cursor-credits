@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createResendClient } from '@/lib/resend'
 import { sendCouponEmail } from '@/lib/emails/send-coupon-email'
 
 export async function POST(request: NextRequest) {
@@ -20,6 +21,17 @@ export async function POST(request: NextRequest) {
 
     const adminClient = await createAdminClient()
 
+    // Get settings including API key
+    const { data: settings } = await adminClient
+      .from('app_settings')
+      .select('resend_api_key, city_name')
+      .limit(1)
+      .single()
+
+    if (!settings?.resend_api_key) {
+      return NextResponse.json({ error: 'Resend API key not configured. Please set it in Settings.' }, { status: 400 })
+    }
+
     // Get attendee with coupon
     const { data: attendee, error: attendeeError } = await adminClient
       .from('attendees')
@@ -36,9 +48,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Send the email
+    const resendClient = createResendClient(settings.resend_api_key)
     await sendCouponEmail({
+      resendClient,
       attendee,
       couponCode: attendee.coupon_codes,
+      fromName: `Cafe Cursor ${settings.city_name}`,
     })
 
     return NextResponse.json({ success: true })

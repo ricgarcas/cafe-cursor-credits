@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { createResendClient } from '@/lib/resend'
 import { sendCouponEmail } from '@/lib/emails/send-coupon-email'
 import { z } from 'zod'
 
@@ -23,6 +24,13 @@ export async function POST(request: NextRequest) {
 
     const { name, email } = result.data
     const supabase = await createAdminClient()
+
+    // Get settings including API key
+    const { data: settings } = await supabase
+      .from('app_settings')
+      .select('resend_api_key, city_name')
+      .limit(1)
+      .single()
 
     // Check if email already exists
     const { data: existingAttendee } = await supabase
@@ -88,15 +96,20 @@ export async function POST(request: NextRequest) {
         if (!updateCouponError) {
           couponAssigned = true
 
-          // Send the coupon email
-          try {
-            await sendCouponEmail({
-              attendee: { ...attendee, coupon_code_id: couponCode.id },
-              couponCode,
-            })
-          } catch (emailError) {
-            console.error('Failed to send email:', emailError)
-            // Don't fail the registration if email fails
+          // Send the coupon email if Resend API key is configured
+          if (settings?.resend_api_key) {
+            try {
+              const resendClient = createResendClient(settings.resend_api_key)
+              await sendCouponEmail({
+                resendClient,
+                attendee: { ...attendee, coupon_code_id: couponCode.id },
+                couponCode,
+                fromName: `Cafe Cursor ${settings.city_name}`,
+              })
+            } catch (emailError) {
+              console.error('Failed to send email:', emailError)
+              // Don't fail the registration if email fails
+            }
           }
         }
       }

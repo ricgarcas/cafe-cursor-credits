@@ -3,7 +3,7 @@ import { syncLumaGuests } from '@/lib/luma/sync'
 import { z } from 'zod'
 
 const syncGuestsSchema = z.object({
-  eventId: z.string().min(1),
+  eventId: z.string().optional(), // Optional - will use settings if not provided
   assignCoupons: z.boolean().optional().default(true),
   sendEmails: z.boolean().optional().default(true),
   status: z.enum(['confirmed', 'waitlist', 'declined', 'cancelled']).optional(),
@@ -11,7 +11,7 @@ const syncGuestsSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await request.json().catch(() => ({}))
     const validation = syncGuestsSchema.safeParse(body)
 
     if (!validation.success) {
@@ -38,4 +38,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

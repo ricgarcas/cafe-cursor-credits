@@ -1,30 +1,39 @@
-# Cafe Cursor - Next.js
+# Cafe Cursor
 
-A modern event registration and coupon distribution system for Cafe Cursor community events. Built with Next.js 15, Supabase, and Resend. Supports single-city deployments with Luma event integration.
+A simple event registration and coupon distribution system for Cafe Cursor community events. Built for Cursor Ambassadors worldwide to easily manage their local events.
+
+## What is this?
+
+Cafe Cursor helps you:
+1. **Collect registrations** from attendees at your events
+2. **Distribute Cursor coupon codes** automatically via email
+3. **Sync with Luma** (optional) to automatically import guests from your Luma events
+
+Each city gets its own deployment - no coding required after initial setup!
+
+> **Note:** The app works great with just Resend for emails! Luma integration is completely optional - only needed if you want to auto-import guests from Luma events.
 
 ## Features
 
-### Public Features
-- **Event Registration** - Simple registration form at `/register`
-- **Automatic Coupon Assignment** - Registrants receive an available coupon code
-- **Email Notification** - Coupon codes delivered via Resend immediately
-- **Dynamic City Branding** - City name configurable via admin settings
+### For Attendees
+- Simple registration form at your event
+- Automatic coupon code delivery via email
 
-### Admin Features
-- **Dashboard** - Overview of registrations and coupon distribution
-- **Attendee Management** - Search, filter, and manage registered attendees
-- **Coupon Management** - Create, edit, delete, and track coupon codes
-- **Email Operations** - Send/resend coupon emails to attendees
-- **Bulk Import** - Import multiple coupon codes at once
-- **CSV Export** - Export attendee data
-- **Settings** - Configure city name and timezone
-- **Admin Self-Registration** - New admins can register with a secret phrase
+### For Ambassadors (Admin)
+- **Dashboard** - See registrations and coupon stats at a glance
+- **Attendee Management** - Search, filter, and manage registrations
+- **Coupon Management** - Add coupon codes (bulk import supported)
+- **Email Resend** - Resend coupon emails if needed
+- **Settings** - Configure your city name, timezone, and API keys (all in-app!)
 
-### Luma Integration
-- **Event Sync** - Automatically sync events from your Luma calendar
-- **Guest Sync** - Import guest lists from Luma events
-- **Auto-Coupon Assignment** - Assign coupons to confirmed Luma guests
-- **Sync Logging** - Track sync history and results
+### Luma Integration (Optional)
+If you use Luma for event management, you can also:
+- Connect your Luma account via API key
+- Select which event to sync
+- Import confirmed guests automatically
+- Coupons assigned and emailed instantly
+
+> Don't use Luma? No problem! Just share your registration link (`/register`) and attendees will get their coupons automatically.
 
 ## Tech Stack
 
@@ -41,9 +50,9 @@ A modern event registration and coupon distribution system for Cafe Cursor commu
 
 - Node.js 18.x or higher
 - npm or yarn
-- Supabase account
-- Resend account
-- Luma Plus subscription (for event integration)
+- Supabase account (free tier works great)
+- Resend account (free tier = 3,000 emails/month - plenty for most events!)
+- Luma Plus subscription (optional - only if you want to sync guests from Luma)
 
 ## Setup
 
@@ -65,25 +74,19 @@ cp env.example .env.local
 Required variables:
 
 ```env
-# Supabase Configuration
+# Supabase Configuration (from your Supabase project settings)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
-# Resend Email Configuration
-RESEND_API_KEY=re_your_resend_api_key
-
-# Luma API Configuration (optional - for event integration)
-LUMA_API_KEY=your_luma_api_key_here
-LUMA_API_BASE_URL=https://public-api.luma.com
-LUMA_CALENDAR_ID=cal-xxxxxxxx
-
-# Admin Registration Secret
+# Admin Registration Secret (create a strong secret phrase)
 ADMIN_REGISTRATION_SECRET=your_secret_phrase_here
 
 # App Configuration
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
+
+> **Note:** Luma and Resend API keys are configured in the admin Settings page, not as environment variables. This makes it easy for ambassadors to update them without touching code!
 
 ### 3. Database Setup
 
@@ -120,24 +123,25 @@ After first admin registration:
 
 The city name will appear as "Cafe Cursor {City Name}" throughout the app.
 
-### 6. Resend Configuration
+### 6. Configure API Keys (In-App)
 
-1. Sign up at [resend.com](https://resend.com)
-2. Get your API key from the dashboard
-3. Verify your sending domain (optional for production)
-4. Update the `from` address in `src/lib/emails/send-coupon-email.ts`
+After logging in as admin, go to **Settings** (`/admin/settings`) to configure:
 
-### 7. Luma Configuration (Optional)
+#### Resend (Required - for sending emails)
+1. Sign up at [resend.com](https://resend.com) - **free tier includes 3,000 emails/month!**
+2. Get your API key from the Resend dashboard
+3. Paste it in the Settings page under "Integrations"
 
-For event integration:
+#### Luma (Optional - for syncing event guests)
+1. You need a [Luma Plus](https://lu.ma) subscription
+2. Go to [Luma Settings > API](https://lu.ma/settings/api-keys)
+3. Generate an API key
+4. Paste it in the Settings page under "Integrations"
+5. Go to the Luma page (`/admin/luma`) to connect your event
 
-1. Subscribe to [Luma Plus](https://lu.ma)
-2. Generate an API key from Luma Settings > API
-3. Find your calendar ID from your Luma calendar URL
-4. Add credentials to `.env.local`
-5. Test connection in admin panel at `/admin/luma`
+> **Without Luma:** The app works perfectly! Attendees register at `/register` and receive coupons via email automatically.
 
-### 8. Run Development Server
+### 7. Run Development Server
 
 ```bash
 npm run dev
@@ -229,28 +233,53 @@ src/
 - Rotate secret after initial admin setup
 - Share via secure channels only (Signal, encrypted email)
 
-## Luma Integration
+## Quick Start for Ambassadors
 
-### Syncing Events
+Already have a deployed instance? Here's how to get started:
 
-1. Go to `/admin/luma`
-2. Click "Sync Events" to fetch events from your Luma calendar
-3. Events are stored locally for guest syncing
+1. **Get your admin credentials** from whoever set up the deployment
+2. **Log in** at `/login`
+3. **Go to Settings** (`/admin/settings`) and configure:
+   - Your city name (e.g., "Toronto", "Berlin", "Singapore")
+   - Your timezone
+   - Resend API key (for emails) - **required**
+   - Luma API key (for syncing guests) - *optional*
+4. **Add coupon codes** at `/admin/coupons` (bulk import supported!)
+5. **Share your registration link** (`/register`) with attendees
+
+### Using Luma? (Optional)
+
+If you manage your events on Luma:
+1. Add your Luma API key in Settings
+2. Go to **Luma** (`/admin/luma`)
+3. Connect your event and sync guests
+4. Coupons are assigned and emailed automatically!
+
+## Luma Integration (Optional)
+
+Skip this section if you don't use Luma for events.
+
+### Setting Up Luma
+
+1. Go to **Settings** (`/admin/settings`)
+2. Add your Luma API key (get it from [lu.ma/settings/api-keys](https://lu.ma/settings/api-keys))
+3. Go to **Luma** (`/admin/luma`)
+4. Enter your Luma event URL or ID and click "Connect Event"
 
 ### Syncing Guests
 
-1. Click "Sync Guests" on any event
-2. Confirmed guests are imported to the local database
-3. Available coupons are automatically assigned
-4. Email notifications sent to new attendees
+1. On the Luma page, click "Sync Guests"
+2. Confirmed guests are automatically imported
+3. Available coupon codes are assigned to each guest
+4. Emails with coupon codes are sent automatically
 
-### Data Flow
+### How It Works
 
 ```
-Luma Calendar → Sync Events → Local Events
-                     ↓
-Luma Guests → Sync Guests → Local Guests → Attendees → Coupon Assignment → Email
+Your Luma Event → Sync Guests → Attendees Created → Coupons Assigned → Emails Sent
 ```
+
+That's it! Guests receive their coupon codes automatically.
 
 ## Deployment to Vercel
 
@@ -266,7 +295,12 @@ git push origin main
 
 1. Go to [vercel.com](https://vercel.com)
 2. Import your GitHub repository
-3. Configure environment variables (all from `.env.local`)
+3. Add these environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `ADMIN_REGISTRATION_SECRET`
+   - `NEXT_PUBLIC_APP_URL` (your Vercel URL)
 4. Deploy
 
 ### 3. Update Supabase
@@ -277,10 +311,12 @@ Add your Vercel URL to Supabase:
 
 ### 4. Post-Deployment
 
-1. Share `ADMIN_REGISTRATION_SECRET` with city organizer
-2. First admin registers and configures city settings
-3. Test registration and email flow
-4. Connect Luma (if using)
+1. Share `ADMIN_REGISTRATION_SECRET` with your city ambassador (securely!)
+2. Ambassador registers at `/admin-register`
+3. Ambassador configures city settings and API keys in `/admin/settings`
+4. Ambassador adds coupon codes
+5. Ambassador connects their Luma event
+6. Ready to go!
 
 ## Development
 
@@ -304,19 +340,31 @@ For schema changes, update the SQL files in `docs/` and run in Supabase SQL Edit
 
 ## Multi-City Deployment
 
-This app follows a **single-city-per-deployment** architecture:
+This app follows a **single-city-per-deployment** architecture. Each city gets its own instance!
 
-- Each city gets its own app instance
-- Each city has its own Supabase project
-- No data sharing between cities
-- Cities can customize independently
+### For New Cities
 
-To deploy for a new city:
-1. Fork/clone the repository
-2. Create new Supabase project
-3. Configure environment variables
-4. Deploy to Vercel
-5. First admin registers and configures city
+1. Fork/clone this repository
+2. Create a new Supabase project
+3. Run the database migrations
+4. Deploy to Vercel with environment variables
+5. Share the admin registration secret with your city ambassador
+6. Ambassador configures everything else in the app!
+
+### What Ambassadors Configure (In-App)
+
+- City name and timezone
+- Luma API key
+- Resend API key
+- Luma event connection
+- Coupon codes
+
+No code changes needed once deployed!
+
+## Need Help?
+
+- Check the [docs/](docs/) folder for detailed guides
+- Reach out to the Cursor team for support
 
 ## License
 

@@ -29,7 +29,7 @@ export class RateLimitError extends LumaApiError {
 
 interface LumaServiceConfig {
   apiKey: string
-  baseUrl: string
+  baseUrl?: string
   calendarId?: string
   timeout?: number
 }
@@ -40,15 +40,15 @@ export class LumaService {
   private readonly calendarId?: string
   private readonly timeout: number
 
-  constructor(config?: Partial<LumaServiceConfig>) {
-    this.baseUrl = config?.baseUrl || process.env.LUMA_API_BASE_URL || 'https://public-api.luma.com'
-    this.apiKey = config?.apiKey || process.env.LUMA_API_KEY || ''
-    this.calendarId = config?.calendarId || process.env.LUMA_CALENDAR_ID
-    this.timeout = config?.timeout || 30000
-
-    if (!this.apiKey) {
-      throw new Error('LUMA_API_KEY is required')
+  constructor(config: LumaServiceConfig) {
+    if (!config.apiKey) {
+      throw new Error('Luma API key is required')
     }
+    
+    this.apiKey = config.apiKey
+    this.baseUrl = config.baseUrl || 'https://public-api.luma.com'
+    this.calendarId = config.calendarId
+    this.timeout = config.timeout || 30000
   }
 
   /**
@@ -266,13 +266,11 @@ export class LumaService {
   }
 }
 
-// Singleton instance for convenience
-let lumaServiceInstance: LumaService | null = null
-
-export function getLumaService(): LumaService {
-  if (!lumaServiceInstance) {
-    lumaServiceInstance = new LumaService()
-  }
-  return lumaServiceInstance
+/**
+ * Create a LumaService instance with the provided API key
+ * Use this factory function to create instances with database-stored keys
+ */
+export function createLumaService(apiKey: string): LumaService {
+  return new LumaService({ apiKey })
 }
 

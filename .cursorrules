@@ -93,14 +93,65 @@ import { cn } from '@/lib/utils'
 
 ### Sending Emails
 
-```typescript
-import { resend } from '@/lib/resend'
+API keys are stored in the database. Fetch settings and create a client:
 
-await resend.emails.send({
-  from: 'Cafe Cursor <noreply@yourdomain.com>',
-  to: recipient,
-  subject: 'Your Subject',
-  html: htmlContent,
+```typescript
+import { createAdminClient } from '@/lib/supabase/server'
+import { createResendClient } from '@/lib/resend'
+import { sendCouponEmail } from '@/lib/emails/send-coupon-email'
+
+// Fetch API key from database
+const supabase = await createAdminClient()
+const { data: settings } = await supabase
+  .from('app_settings')
+  .select('resend_api_key, city_name')
+  .limit(1)
+  .single()
+
+if (settings?.resend_api_key) {
+  const resendClient = createResendClient(settings.resend_api_key)
+  await sendCouponEmail({
+    resendClient,
+    attendee,
+    couponCode,
+    fromName: `Cafe Cursor ${settings.city_name}`,
+  })
+}
+```
+
+### Using Luma API
+
+Luma API key is stored in the database. Fetch settings and create a service:
+
+```typescript
+import { createAdminClient } from '@/lib/supabase/server'
+import { createLumaService } from '@/lib/luma/service'
+
+// Fetch API key from database
+const supabase = await createAdminClient()
+const { data: settings } = await supabase
+  .from('app_settings')
+  .select('luma_api_key')
+  .limit(1)
+  .single()
+
+if (settings?.luma_api_key) {
+  const luma = createLumaService(settings.luma_api_key)
+  const result = await luma.testConnection()
+  const guests = await luma.getAllEventGuests(eventId, 'confirmed')
+}
+```
+
+For syncing guests (handles everything including emails):
+
+```typescript
+import { syncLumaGuests } from '@/lib/luma/sync'
+
+// Syncs guests from configured event, assigns coupons, sends emails
+const result = await syncLumaGuests(eventId, {
+  assignCoupons: true,
+  sendEmails: true,
+  status: 'confirmed',
 })
 ```
 
@@ -139,14 +190,10 @@ Required:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `RESEND_API_KEY`
 - `ADMIN_REGISTRATION_SECRET`
 - `NEXT_PUBLIC_APP_URL`
 
-Optional (Luma integration):
-- `LUMA_API_KEY`
-- `LUMA_API_BASE_URL`
-- `LUMA_CALENDAR_ID`
+Note: Luma API key and Resend API key are stored in the database (`app_settings` table) and configured via the admin Settings page.
 
 ## Best Practices
 
@@ -164,4 +211,12 @@ City name and timezone are stored in `app_settings` table:
 - Fetch via `/api/settings/public` (public) or `/api/admin/settings` (authenticated)
 - Display as "Cafe Cursor {city_name}" throughout the app
 - Timezone used for date formatting
+
+## API Keys Storage
+
+API keys for external services are stored in the `app_settings` table (not environment variables):
+- `luma_api_key` - For syncing guests from Luma events
+- `resend_api_key` - For sending coupon emails
+
+These are configured via the admin Settings page at `/admin/settings`. The public settings endpoint (`/api/settings/public`) only returns non-sensitive fields (city_name, timezone), while the authenticated admin endpoint returns all fields including API keys.
 

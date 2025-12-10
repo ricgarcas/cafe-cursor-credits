@@ -1,5 +1,5 @@
--- Cafe Cursor Toronto - Supabase Database Schema
--- Run this in your Supabase SQL Editor
+-- Cafe Cursor - Initial Database Schema
+-- Creates base tables for attendees and coupon codes
 
 -- Create coupon_codes table
 create table if not exists public.coupon_codes (
@@ -33,44 +33,37 @@ alter table public.coupon_codes enable row level security;
 alter table public.attendees enable row level security;
 
 -- RLS Policies for coupon_codes
--- Allow public to read available coupon codes (for registration)
 create policy "Allow public to read available coupons"
   on public.coupon_codes
   for select
   using (true);
 
--- Allow service role (admin) to do everything
 create policy "Allow service role full access to coupons"
   on public.coupon_codes
   for all
   using (auth.role() = 'service_role');
 
--- Allow authenticated users (admins) to manage coupons
 create policy "Allow authenticated users to manage coupons"
   on public.coupon_codes
   for all
   using (auth.role() = 'authenticated');
 
 -- RLS Policies for attendees
--- Allow public to insert new attendees (registration)
 create policy "Allow public to insert attendees"
   on public.attendees
   for insert
   with check (true);
 
--- Allow public to read their own record by email
 create policy "Allow public to read own attendee record"
   on public.attendees
   for select
   using (true);
 
--- Allow authenticated users (admins) to manage attendees
 create policy "Allow authenticated users to manage attendees"
   on public.attendees
   for all
   using (auth.role() = 'authenticated');
 
--- Allow service role full access
 create policy "Allow service role full access to attendees"
   on public.attendees
   for all
@@ -93,10 +86,4 @@ create trigger set_coupon_codes_updated_at
 create trigger set_attendees_updated_at
   before update on public.attendees
   for each row execute function public.handle_updated_at();
-
--- Sample coupon codes (optional - remove in production)
--- insert into public.coupon_codes (code) values
---   ('CURSOR-ABC123'),
---   ('CURSOR-DEF456'),
---   ('CURSOR-GHI789');
 

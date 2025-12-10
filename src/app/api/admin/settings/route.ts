@@ -5,6 +5,9 @@ import { z } from 'zod'
 const settingsUpdateSchema = z.object({
   city_name: z.string().min(1).max(255),
   timezone: z.string().min(1).max(100),
+  luma_event_id: z.string().nullable().optional(),
+  luma_api_key: z.string().nullable().optional(),
+  resend_api_key: z.string().nullable().optional(),
 })
 
 // Default settings to return if table doesn't exist or is empty
@@ -12,6 +15,9 @@ const DEFAULT_SETTINGS = {
   id: 0,
   city_name: 'Cafe Cursor',
   timezone: 'America/Toronto',
+  luma_event_id: null as string | null,
+  luma_api_key: null as string | null,
+  resend_api_key: null as string | null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 }
@@ -77,7 +83,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const { city_name, timezone } = result.data
+    const { city_name, timezone, luma_event_id, luma_api_key, resend_api_key } = result.data
 
     // Use admin client to update settings (bypasses RLS)
     const adminSupabase = await createAdminClient()
@@ -89,11 +95,32 @@ export async function PUT(request: NextRequest) {
       .limit(1)
       .single()
 
+    // Build update object (only include optional fields if explicitly provided)
+    const updateData: { 
+      city_name: string
+      timezone: string
+      luma_event_id?: string | null
+      luma_api_key?: string | null
+      resend_api_key?: string | null
+    } = { 
+      city_name, 
+      timezone 
+    }
+    if (luma_event_id !== undefined) {
+      updateData.luma_event_id = luma_event_id
+    }
+    if (luma_api_key !== undefined) {
+      updateData.luma_api_key = luma_api_key
+    }
+    if (resend_api_key !== undefined) {
+      updateData.resend_api_key = resend_api_key
+    }
+
     if (fetchError || !currentSettings) {
       // If no settings exist, create them
       const { data: newSettings, error: insertError } = await adminSupabase
         .from('app_settings')
-        .insert({ city_name, timezone })
+        .insert(updateData)
         .select()
         .single()
 
@@ -111,7 +138,7 @@ export async function PUT(request: NextRequest) {
     // Update existing settings
     const { data: updatedSettings, error: updateError } = await adminSupabase
       .from('app_settings')
-      .update({ city_name, timezone })
+      .update(updateData)
       .eq('id', currentSettings.id)
       .select()
       .single()
