@@ -139,4 +139,5 @@ Cursor is available at [cursor.com](https://cursor.com).
 
 ## License
 
-Proprietary — for use by the Cafe Cursor / Cursor Ambassador community.
+[MIT](./LICENSE) — free to use, modify, and redistribute. Built for the
+Cafe Cursor / Cursor Ambassador community, open to everyone.
