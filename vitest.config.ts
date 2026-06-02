@@ -11,6 +11,12 @@ export default defineConfig({
     exclude: ['node_modules/**', '.next/**', 'e2e/**'],
     setupFiles: ['./tests/setup.ts'],
     testTimeout: 15_000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/lib/**'],
+      exclude: ['src/lib/**/*.test.ts'],
+    },
   },
   resolve: {
     alias: {
