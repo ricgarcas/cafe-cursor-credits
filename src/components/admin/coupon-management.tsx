@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { CouponCode } from '@/types/database'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import type { CouponCode } from '@/lib/db/schema'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,287 +23,173 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Plus, MoreHorizontal, Pencil, Trash2, Ticket, CheckCircle, XCircle } from 'lucide-react'
-import { formatDistanceToNow, format } from 'date-fns'
+import { Plus, Pencil, Trash2, CheckCircle2, Upload } from 'lucide-react'
+import { format } from 'date-fns'
 
 export function CouponManagement() {
   const [coupons, setCoupons] = useState<CouponCode[]>([])
   const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState({
-    total: 0,
-    used: 0,
-    available: 0,
-  })
   const [newCode, setNewCode] = useState('')
-  const [editingCoupon, setEditingCoupon] = useState<CouponCode | null>(null)
+  const [editing, setEditing] = useState<CouponCode | null>(null)
   const [editCode, setEditCode] = useState('')
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const [bulkCodes, setBulkCodes] = useState('')
-  const [isBulkOpen, setIsBulkOpen] = useState(false)
-
-  const supabase = createClient()
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   const fetchCoupons = useCallback(async () => {
     setLoading(true)
-
-    const { data, error } = await supabase
-      .from('coupon_codes')
-      .select()
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      toast.error('Failed to load coupons')
-      console.error(error)
-    } else {
-      setCoupons(data || [])
+    try {
+      const res = await fetch('/api/admin/coupons')
+      const json = await res.json()
+      setCoupons(json.coupons ?? [])
+    } catch {
+      toast.error('Failed to load codes')
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
-  }, [supabase])
-
-  const fetchStats = useCallback(async () => {
-    const [
-      { count: total },
-      { count: used },
-      { count: available },
-    ] = await Promise.all([
-      supabase.from('coupon_codes').select('*', { count: 'exact', head: true }),
-      supabase.from('coupon_codes').select('*', { count: 'exact', head: true }).eq('is_used', true),
-      supabase.from('coupon_codes').select('*', { count: 'exact', head: true }).eq('is_used', false),
-    ])
-
-    setStats({
-      total: total || 0,
-      used: used || 0,
-      available: available || 0,
-    })
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchCoupons()
-    fetchStats()
-  }, [fetchCoupons, fetchStats])
+  }, [fetchCoupons])
 
-  const handleCreateCoupon = async () => {
-    if (!newCode.trim()) {
-      toast.error('Please enter a coupon code')
-      return
+  const stats = useMemo(() => {
+    const used = coupons.filter((c) => c.isUsed).length
+    return {
+      total: coupons.length,
+      used,
+      available: coupons.length - used,
     }
+  }, [coupons])
 
-    const { error } = await supabase
-      .from('coupon_codes')
-      .insert({ code: newCode.trim().toUpperCase() })
-
-    if (error) {
-      if (error.code === '23505') {
-        toast.error('This coupon code already exists')
-      } else {
-        toast.error('Failed to create coupon')
-      }
-    } else {
-      toast.success('Coupon created successfully')
+  const createOne = async () => {
+    if (!newCode.trim()) return
+    const res = await fetch('/api/admin/coupons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: newCode.trim() }),
+    })
+    if (res.ok) {
+      toast.success('Code added')
       setNewCode('')
-      setIsCreateOpen(false)
+      setCreateOpen(false)
       fetchCoupons()
-      fetchStats()
+    } else {
+      const j = await res.json().catch(() => ({}))
+      toast.error(j.error || 'Failed to add code')
     }
   }
 
-  const handleBulkImport = async () => {
+  const createBulk = async () => {
     const codes = bulkCodes
       .split('\n')
-      .map((code) => code.trim().toUpperCase())
-      .filter((code) => code.length > 0)
-
-    if (codes.length === 0) {
-      toast.error('Please enter at least one coupon code')
-      return
-    }
-
-    const { error } = await supabase
-      .from('coupon_codes')
-      .insert(codes.map((code) => ({ code })))
-
-    if (error) {
-      if (error.code === '23505') {
-        toast.error('Some coupon codes already exist')
-      } else {
-        toast.error('Failed to import coupons')
-      }
-    } else {
-      toast.success(`${codes.length} coupons imported successfully`)
+      .map((c) => c.trim())
+      .filter(Boolean)
+    if (codes.length === 0) return
+    const res = await fetch('/api/admin/coupons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codes }),
+    })
+    if (res.ok) {
+      const j = await res.json()
+      toast.success(`Added ${j.inserted} · ${j.duplicates} duplicates skipped`)
       setBulkCodes('')
-      setIsBulkOpen(false)
+      setBulkOpen(false)
       fetchCoupons()
-      fetchStats()
-    }
-  }
-
-  const handleEditCoupon = async () => {
-    if (!editingCoupon || !editCode.trim()) return
-
-    const { error } = await supabase
-      .from('coupon_codes')
-      .update({ code: editCode.trim().toUpperCase() })
-      .eq('id', editingCoupon.id)
-
-    if (error) {
-      if (error.code === '23505') {
-        toast.error('This coupon code already exists')
-      } else {
-        toast.error('Failed to update coupon')
-      }
     } else {
-      toast.success('Coupon updated successfully')
-      setEditingCoupon(null)
-      setEditCode('')
-      setIsEditOpen(false)
-      fetchCoupons()
+      toast.error('Bulk import failed')
     }
   }
 
-  const handleDeleteCoupon = async (couponId: number) => {
-    const coupon = coupons.find((c) => c.id === couponId)
-    if (coupon?.is_used) {
-      toast.error('Cannot delete a used coupon')
-      return
-    }
-
-    if (!confirm('Are you sure you want to delete this coupon?')) return
-
-    const { error } = await supabase
-      .from('coupon_codes')
-      .delete()
-      .eq('id', couponId)
-
-    if (error) {
-      toast.error('Failed to delete coupon')
+  const saveEdit = async () => {
+    if (!editing) return
+    const res = await fetch(`/api/admin/coupons/${editing.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: editCode.trim() }),
+    })
+    if (res.ok) {
+      toast.success('Saved')
+      setEditOpen(false)
+      setEditing(null)
+      fetchCoupons()
     } else {
-      toast.success('Coupon deleted')
-      fetchCoupons()
-      fetchStats()
+      const j = await res.json().catch(() => ({}))
+      toast.error(j.error || 'Failed to save')
     }
   }
 
-  const openEditDialog = (coupon: CouponCode) => {
-    setEditingCoupon(coupon)
-    setEditCode(coupon.code)
-    setIsEditOpen(true)
+  const remove = async (id: number) => {
+    if (!confirm('Delete this code?')) return
+    const res = await fetch(`/api/admin/coupons/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      toast.success('Deleted')
+      fetchCoupons()
+    } else toast.error('Failed to delete')
   }
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardDescription className="text-lg font-light">Total Coupons</CardDescription>
-            <CardTitle className="text-2xl">{stats.total}</CardTitle>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardDescription className="text-lg font-light">Used</CardDescription>
-            <CardTitle className="text-2xl">{stats.used}</CardTitle>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardDescription className="text-lg font-light">Available</CardDescription>
-            <CardTitle className="text-2xl">{stats.available}</CardTitle>
-          </CardHeader>
-        </Card>
+        <StatCard label="Total codes" value={stats.total} />
+        <StatCard label="Available" value={stats.available} tone="green" />
+        <StatCard label="Used" value={stats.used} tone="orange" />
       </div>
 
-      {/* Table */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-lg font-light">Coupon Codes</CardTitle>
-          <div className="flex gap-2">
-            <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
+        <CardHeader>
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Bulk Import
+                <Button variant="outline">
+                  <Upload className="size-4" /> Bulk add
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Bulk Import Coupons</DialogTitle>
-                  <DialogDescription>
-                    Enter coupon codes, one per line.
-                  </DialogDescription>
+                  <DialogTitle>Bulk add codes</DialogTitle>
+                  <DialogDescription>One code per line. Duplicates are skipped.</DialogDescription>
                 </DialogHeader>
-                <div className="py-4">
-                  <Label htmlFor="bulk-codes">Coupon Codes</Label>
-                  <textarea
-                    id="bulk-codes"
-                    value={bulkCodes}
-                    onChange={(e) => setBulkCodes(e.target.value)}
-                    placeholder="CURSOR-ABC123&#10;CURSOR-DEF456&#10;CURSOR-GHI789"
-                    rows={8}
-                    className="mt-2 w-full rounded-md bg-background border border-input p-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                </div>
+                <textarea
+                  value={bulkCodes}
+                  onChange={(e) => setBulkCodes(e.target.value)}
+                  className="w-full min-h-[180px] rounded-[10px] border border-border bg-background p-3 font-code text-sm"
+                  placeholder="AAAA-BBBB-CCCC&#10;XXXX-YYYY-ZZZZ"
+                />
                 <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsBulkOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={handleBulkImport}>
-                    Import
-                  </Button>
+                  <Button variant="ghost" onClick={() => setBulkOpen(false)}>Cancel</Button>
+                  <Button onClick={createBulk}>Add codes</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
 
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Coupon
+                <Button>
+                  <Plus className="size-4" /> Add code
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create Coupon Code</DialogTitle>
-                  <DialogDescription>
-                    Enter a unique coupon code to add to the system.
-                  </DialogDescription>
+                  <DialogTitle>Add a code</DialogTitle>
                 </DialogHeader>
-                <div className="py-4">
-                  <Label htmlFor="code">Coupon Code</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="code">Code</Label>
                   <Input
                     id="code"
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value)}
-                    placeholder="CURSOR-ABC123"
-                    className="mt-2"
+                    placeholder="AAAA-BBBB-CCCC or full redeem URL"
+                    className="font-code"
                   />
                 </div>
                 <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsCreateOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreateCoupon}>
-                    Create
-                  </Button>
+                  <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
+                  <Button onClick={createOne}>Add</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -312,83 +197,68 @@ export function CouponManagement() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-zinc-500">Loading...</div>
+            <div className="py-10 text-center text-muted-foreground">Loading…</div>
           ) : coupons.length === 0 ? (
-            <div className="text-center py-8 text-zinc-500">No coupon codes yet</div>
+            <div className="py-10 text-center text-muted-foreground">
+              No codes yet. Use &quot;Bulk add&quot; to paste in a list.
+            </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="border-zinc-800 hover:bg-transparent">
-                  <TableHead className="text-zinc-400">Code</TableHead>
-                  <TableHead className="text-zinc-400">Status</TableHead>
-                  <TableHead className="text-zinc-400">Source</TableHead>
-                  <TableHead className="text-zinc-400">Used At</TableHead>
-                  <TableHead className="text-zinc-400">Created</TableHead>
-                  <TableHead className="text-zinc-400 text-right">Actions</TableHead>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Used at</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {coupons.map((coupon) => (
-                  <TableRow key={coupon.id} className="border-zinc-800 hover:bg-zinc-800/50">
-                    <TableCell className="text-white font-mono">{coupon.code}</TableCell>
+                {coupons.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-code text-xs max-w-[320px] truncate">
+                      {c.code}
+                    </TableCell>
                     <TableCell>
-                      {coupon.is_used ? (
-                        <Badge variant="outline" className="bg-emerald-950/50 text-emerald-400 border-emerald-800">
+                      {c.isUsed ? (
+                        <Badge className="bg-[color:var(--brand-orange-soft)] text-[color:var(--brand-orange)] border border-[color:var(--brand-orange)]/20">
                           Used
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="bg-blue-950/50 text-blue-400 border-blue-800">
-                          Available
+                        <Badge className="bg-[color:var(--brand-green-soft)] text-[color:var(--brand-green)] border border-[color:var(--brand-green)]/20">
+                          <CheckCircle2 className="size-3" /> Available
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {coupon.used_by_type === 'luma_guest' ? (
-                        <Badge variant="outline" className="bg-purple-950/50 text-purple-400 border-purple-800">
-                          Luma
-                        </Badge>
-                      ) : coupon.used_by_type === 'attendee' ? (
-                        <Badge variant="outline" className="bg-amber-950/50 text-amber-400 border-amber-800">
-                          Attendee
-                        </Badge>
-                      ) : (
-                        <span className="text-zinc-500">-</span>
-                      )}
+                    <TableCell className="text-muted-foreground text-sm">
+                      {c.usedAt ? format(new Date(c.usedAt), 'MMM d, HH:mm') : '—'}
                     </TableCell>
-                    <TableCell className="text-zinc-500">
-                      {coupon.used_at
-                        ? format(new Date(coupon.used_at), 'MMM d, yyyy HH:mm')
-                        : '-'}
-                    </TableCell>
-                    <TableCell className="text-zinc-500">
-                      {formatDistanceToNow(new Date(coupon.created_at), { addSuffix: true })}
+                    <TableCell className="text-muted-foreground text-sm">
+                      {c.createdAt ? format(new Date(c.createdAt), 'MMM d') : ''}
                     </TableCell>
                     <TableCell className="text-right">
-                      {!coupon.is_used && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-white">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
-                            <DropdownMenuItem
-                              onClick={() => openEditDialog(coupon)}
-                              className="text-zinc-300 focus:bg-zinc-800 focus:text-white cursor-pointer"
-                            >
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteCoupon(coupon.id)}
-                              className="text-red-400 focus:bg-red-950/50 focus:text-red-300 cursor-pointer"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          setEditing(c)
+                          setEditCode(c.code)
+                          setEditOpen(true)
+                        }}
+                        disabled={c.isUsed}
+                        title="Edit"
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => remove(c.id)}
+                        disabled={c.isUsed}
+                        title="Delete"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -398,35 +268,15 @@ export function CouponManagement() {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-white">Edit Coupon Code</DialogTitle>
-            <DialogDescription className="text-zinc-400">
-              Update the coupon code value.
-            </DialogDescription>
+            <DialogTitle>Edit code</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="edit-code" className="text-zinc-300">Coupon Code</Label>
-            <Input
-              id="edit-code"
-              value={editCode}
-              onChange={(e) => setEditCode(e.target.value)}
-              className="mt-2 bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
-            />
-          </div>
+          <Input value={editCode} onChange={(e) => setEditCode(e.target.value)} className="font-code" />
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditOpen(false)}
-              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700"
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleEditCoupon} className="bg-zinc-100 text-zinc-900 hover:bg-white">
-              Save
-            </Button>
+            <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={saveEdit}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -434,3 +284,35 @@ export function CouponManagement() {
   )
 }
 
+function StatCard({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string
+  value: number
+  tone?: 'default' | 'green' | 'orange'
+}) {
+  return (
+    <Card className="relative overflow-hidden">
+      <div className="absolute inset-0 bg-dotted opacity-60 pointer-events-none" aria-hidden />
+      <CardContent className="relative flex flex-col gap-2 py-1">
+        <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </span>
+        <span
+          className={
+            'font-display text-3xl tracking-tight ' +
+            (tone === 'green'
+              ? 'text-[color:var(--brand-green)]'
+              : tone === 'orange'
+                ? 'text-[color:var(--brand-orange)]'
+                : '')
+          }
+        >
+          {value}
+        </span>
+      </CardContent>
+    </Card>
+  )
+}

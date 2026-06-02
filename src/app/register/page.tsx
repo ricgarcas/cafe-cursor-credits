@@ -1,239 +1,151 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Card, CardContent } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
-import { Loader2, CheckCircle } from 'lucide-react'
+import { Loader2, CheckCircle2, Mail } from 'lucide-react'
+import { PublicShell, usePublicSettings } from '@/components/public/shell'
 
-const registerSchema = z.object({
+const schema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
-  email: z.string().email('Please enter a valid email address').max(255),
+  email: z.string().email('Enter a valid email').max(255),
 })
-
-type RegisterFormData = z.infer<typeof registerSchema>
-
-interface RegistrationResult {
-  success: boolean
-  couponAssigned: boolean
-  message?: string
-}
+type FormValues = z.infer<typeof schema>
 
 export default function RegisterPage() {
-  const [result, setResult] = useState<RegistrationResult | null>(null)
+  const settings = usePublicSettings()
+  const [result, setResult] = useState<{ success: boolean; couponAssigned: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [cityName, setCityName] = useState('Cafe Cursor')
 
-  // Fetch city name from settings
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await fetch('/api/settings/public')
-        if (response.ok) {
-          const settings = await response.json()
-          setCityName(settings.city_name)
-        }
-      } catch (error) {
-        console.error('Failed to fetch settings:', error)
-      }
-    }
-    fetchSettings()
-  }, [])
-
-  const form = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: {
-      name: '',
-      email: '',
-    },
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: '', email: '' },
   })
 
-  const onSubmit = async (data: RegisterFormData) => {
+  const onSubmit = async (data: FormValues) => {
     setError(null)
     setLoading(true)
-
     try {
-      const response = await fetch('/api/register', {
+      const res = await fetch('/api/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        setError(result.error || 'Registration failed')
-        setLoading(false)
-        return
+      const json = await res.json()
+      if (!res.ok) {
+        setError(json.error || 'Registration failed')
+      } else {
+        setResult(json)
       }
-
-      setResult(result)
     } catch {
-      setError('An unexpected error occurred. Please try again.')
+      setError('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleRegisterAnother = () => {
-    setResult(null)
-    setError(null)
-    form.reset()
-  }
-
+  const city = settings.city_name && settings.city_name !== 'Cafe Cursor' ? settings.city_name : null
   return (
-    <div className="min-h-screen w-full bg-black relative text-gray-100 flex flex-col items-center justify-center p-4 md:p-6">
-      {/* Circuit Board - Dark Pattern */}
-      <div
-        className="fixed inset-0 z-0 pointer-events-none opacity-40"
-        style={{
-          backgroundImage: `
-            repeating-linear-gradient(0deg, transparent, transparent 19px, rgba(255, 255, 255, 0.06) 19px, rgba(255, 255, 255, 0.06) 20px, transparent 20px, transparent 39px, rgba(255, 255, 255, 0.06) 39px, rgba(255, 255, 255, 0.06) 40px),
-            repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(255, 255, 255, 0.06) 19px, rgba(255, 255, 255, 0.06) 20px, transparent 20px, transparent 39px, rgba(255, 255, 255, 0.06) 39px, rgba(255, 255, 255, 0.06) 40px),
-            radial-gradient(circle at 20px 20px, rgba(255, 255, 255, 0.1) 2px, transparent 2px),
-            radial-gradient(circle at 40px 40px, rgba(255, 255, 255, 0.1) 2px, transparent 2px)
-          `,
-          backgroundSize: '40px 40px, 40px 40px, 40px 40px, 40px 40px',
-        }}
-      />
-
-      <div className="relative z-10 flex flex-col items-center gap-4 w-full">
-        {/* Logo */}
-        <div className="h-14 w-14 md:h-18 md:w-18">
-          <img 
-            src="/assets/cursor-cube-logo-dark.svg" 
-            alt="Cursor Logo" 
-            className="h-full w-full"
-          />
-        </div>
-
-        {/* Title */}
-        <h1 className="text-4xl md:text-5xl font-normal text-white text-center leading-tighter tracking-tight mb-4">
-          Cafe Cursor
-          <span className="block">{cityName}</span>
-        </h1>
-
-        {/* Card */}
-        <Card className="w-full max-w-md bg-zinc-950 border-zinc-800 shadow-lg">
-          <CardContent className="px-8 pt-3 pb-6">
-            {result ? (
-              <div className="flex flex-col gap-6">
-                <Alert className="bg-emerald-950/50 border-emerald-800 text-emerald-100">
-                  <CheckCircle className="h-4 w-4 text-emerald-400" />
-                  <AlertTitle className="text-emerald-100">Registration Successful!</AlertTitle>
-                  <AlertDescription className="text-emerald-200/80">
-                    Thank you for registering for Cafe Cursor {cityName}.
-                    {result.couponAssigned && (
-                      <span className="block mt-2">
-                        Please check your email for your coupon code.
-                      </span>
-                    )}
-                  </AlertDescription>
-                </Alert>
-
-                <Button
-                  onClick={handleRegisterAnother}
-                  variant="outline"
-                  className="w-full bg-zinc-800/50 border-zinc-700 border-dashed text-zinc-300 hover:bg-zinc-800 hover:text-white"
-                >
-                  Register Another Attendee
-                </Button>
+    <PublicShell
+      title={
+        city ? (
+          <>
+            Cafe Cursor
+            <span className="block">{city}</span>
+          </>
+        ) : (
+          'Cafe Cursor'
+        )
+      }
+      tagline={settings.event_tagline ?? 'Builders, coffee, and good vibes.'}
+    >
+      <Card>
+        <CardContent className="pt-2">
+          {result ? (
+            <div className="flex flex-col gap-5 py-2">
+              <div className="flex items-start gap-3 rounded-[10px] border border-[color:var(--brand-green)]/30 bg-[color:var(--brand-green-soft)] px-4 py-3">
+                <CheckCircle2 className="size-5 text-[color:var(--brand-green)] mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">You&apos;re in.</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {result.couponAssigned
+                      ? 'Check your email for your Cursor credit code.'
+                      : 'You&apos;re registered. Credits will be emailed when available.'}
+                  </p>
+                </div>
               </div>
-            ) : (
-              <>
-                <CardHeader className="p-0 pb-6 text-center gap-0">
-                  <CardTitle className="text-2xl text-white mb-0">Register for Cursor Credits</CardTitle>
-                  <CardDescription className="text-zinc-400">
-                    Enter your details to register and receive free Cursor Credits!
-                  </CardDescription>
-                </CardHeader>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setResult(null)
+                  form.reset()
+                }}
+              >
+                Register another
+              </Button>
+            </div>
+          ) : (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ben Lang" autoComplete="name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="you@domain.com" autoComplete="email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button type="submit" disabled={loading} size="lg" className="w-full">
+                  {loading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" /> Registering…
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="size-4" /> Register &amp; email my code
+                    </>
+                  )}
+                </Button>
+              </form>
+            </Form>
+          )}
+        </CardContent>
+      </Card>
 
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    {error && (
-                      <Alert variant="destructive" className="bg-red-950/50 border-red-900 text-red-200">
-                        <AlertDescription>{error}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-zinc-300">Full Name</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="John Smith"
-                              className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage className="text-red-400" />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-zinc-300">Email Address</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="email"
-                              placeholder="john@example.com"
-                              className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage className="text-red-400" />
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full bg-white text-black hover:bg-zinc-200 mt-2"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Registering...
-                        </>
-                      ) : (
-                        'Register'
-                      )}
-                    </Button>
-                  </form>
-                </Form>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Footer logo */}
-        <div className="flex items-center justify-center pt-4">
-          <a href="https://www.cursor.com/" target="_blank" rel="noopener noreferrer">
-            <img 
-              src="/assets/cursor-cube-logo-dark.svg" 
-              alt="Cursor Logo" 
-              className="h-8 w-8 opacity-50 hover:opacity-80 transition-opacity"
-            />
-          </a>
-        </div>
-      </div>
-    </div>
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        At the event? <Link href="/claim" className="text-[color:var(--brand-orange)] hover:underline underline-offset-4">Claim your code instantly →</Link>
+      </p>
+    </PublicShell>
   )
 }
-

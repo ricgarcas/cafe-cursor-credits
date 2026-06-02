@@ -1,164 +1,151 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Loader2, Save, Settings, Sparkles, Check, ChevronsUpDown, Eye, EyeOff, Key } from 'lucide-react'
+import { Loader2, Save, Check, ChevronsUpDown, Eye, EyeOff, Key, Pencil, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import type { AppSettings } from '@/types/database'
+import { UNCHANGED } from '@/lib/secrets'
 
-const settingsSchema = z.object({
-  city_name: z.string().min(1, 'City name is required').max(255),
-  timezone: z.string().min(1, 'Timezone is required'),
-  resend_api_key: z.string().nullable().optional(),
-})
-
-type SettingsFormData = z.infer<typeof settingsSchema>
-
-// Common timezones - sorted alphabetically by label
+// Canonical timezone list — no duplicates, Mexico City first.
 const TIMEZONES = [
-  { value: 'Australia/Adelaide', label: 'Adelaide (ACST/ACDT)' },
-  { value: 'Europe/Amsterdam', label: 'Amsterdam (CET/CEST)' },
-  { value: 'Europe/Athens', label: 'Athens (EET/EEST)' },
-  { value: 'Pacific/Auckland', label: 'Auckland (NZST/NZDT)' },
-  { value: 'Asia/Makassar', label: 'Bali (WITA)' },
-  { value: 'Asia/Bangkok', label: 'Bangkok / Chiang Mai (ICT)' },
-  { value: 'Europe/Berlin', label: 'Berlin (CET/CEST)' },
-  { value: 'America/Bogota', label: 'Bogotá (COT)' },
-  { value: 'Australia/Brisbane', label: 'Brisbane (AEST)' },
-  { value: 'America/Buenos_Aires', label: 'Buenos Aires (ART)' },
-  { value: 'Africa/Cairo', label: 'Cairo (EET)' },
-  { value: 'Africa/Casablanca', label: 'Casablanca (WET)' },
+  { value: 'America/Mexico_City', label: 'Mexico City (CST/CDT)' },
+  { value: 'America/Toronto', label: 'Toronto (EST/EDT)' },
+  { value: 'America/New_York', label: 'New York (EST/EDT)' },
   { value: 'America/Chicago', label: 'Chicago (CST/CDT)' },
   { value: 'America/Denver', label: 'Denver (MST/MDT)' },
-  { value: 'Asia/Dhaka', label: 'Dhaka (BST)' },
-  { value: 'Asia/Dubai', label: 'Dubai (GST)' },
-  { value: 'Europe/Dublin', label: 'Dublin (GMT/IST)' },
-  { value: 'America/Edmonton', label: 'Edmonton (MST/MDT)' },
-  { value: 'America/Halifax', label: 'Halifax (AST/ADT)' },
-  { value: 'Asia/Ho_Chi_Minh', label: 'Ho Chi Minh City (ICT)' },
-  { value: 'Asia/Hong_Kong', label: 'Hong Kong (HKT)' },
-  { value: 'Pacific/Honolulu', label: 'Honolulu (HST)' },
-  { value: 'Asia/Istanbul', label: 'Istanbul (TRT)' },
-  { value: 'Asia/Jakarta', label: 'Jakarta (WIB)' },
-  { value: 'Africa/Johannesburg', label: 'Johannesburg (SAST)' },
-  { value: 'Asia/Kathmandu', label: 'Kathmandu (NPT)' },
-  { value: 'Asia/Kuala_Lumpur', label: 'Kuala Lumpur (MYT)' },
-  { value: 'Africa/Lagos', label: 'Lagos (WAT)' },
-  { value: 'America/Lima', label: 'Lima (PET)' },
-  { value: 'Europe/Lisbon', label: 'Lisbon (WET/WEST)' },
-  { value: 'Europe/London', label: 'London (GMT/BST)' },
   { value: 'America/Los_Angeles', label: 'Los Angeles (PST/PDT)' },
-  { value: 'Europe/Madrid', label: 'Madrid (CET/CEST)' },
-  { value: 'Asia/Manila', label: 'Manila (PHT)' },
-  { value: 'Australia/Melbourne', label: 'Melbourne (AEST/AEDT)' },
-  { value: 'America/Mexico_City', label: 'Mexico City (CST/CDT)' },
-  { value: 'America/Montreal', label: 'Montreal (EST/EDT)' },
-  { value: 'Europe/Moscow', label: 'Moscow (MSK)' },
-  { value: 'Asia/Kolkata', label: 'Mumbai / Delhi (IST)' },
-  { value: 'Africa/Nairobi', label: 'Nairobi (EAT)' },
-  { value: 'America/New_York', label: 'New York (EST/EDT)' },
-  { value: 'Europe/Paris', label: 'Paris (CET/CEST)' },
-  { value: 'Australia/Perth', label: 'Perth (AWST)' },
-  { value: 'America/Phoenix', label: 'Phoenix (MST)' },
-  { value: 'Europe/Rome', label: 'Rome (CET/CEST)' },
+  { value: 'America/Bogota', label: 'Bogotá (COT)' },
+  { value: 'America/Lima', label: 'Lima (PET)' },
   { value: 'America/Sao_Paulo', label: 'São Paulo (BRT)' },
-  { value: 'Asia/Seoul', label: 'Seoul (KST)' },
-  { value: 'Asia/Shanghai', label: 'Shanghai / Beijing (CST)' },
+  { value: 'America/Buenos_Aires', label: 'Buenos Aires (ART)' },
+  { value: 'Europe/London', label: 'London (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Paris (CET/CEST)' },
+  { value: 'Europe/Berlin', label: 'Berlin (CET/CEST)' },
+  { value: 'Europe/Madrid', label: 'Madrid (CET/CEST)' },
+  { value: 'Europe/Lisbon', label: 'Lisbon (WET/WEST)' },
+  { value: 'Africa/Lagos', label: 'Lagos (WAT)' },
+  { value: 'Asia/Dubai', label: 'Dubai (GST)' },
+  { value: 'Asia/Kolkata', label: 'Mumbai / Delhi (IST)' },
+  { value: 'Asia/Bangkok', label: 'Bangkok (ICT)' },
   { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
-  { value: 'America/St_Johns', label: "St. John's (NST/NDT)" },
-  { value: 'Europe/Stockholm', label: 'Stockholm (CET/CEST)' },
-  { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
-  { value: 'Asia/Taipei', label: 'Taipei (CST)' },
-  { value: 'Asia/Tel_Aviv', label: 'Tel Aviv (IST/IDT)' },
+  { value: 'Asia/Hong_Kong', label: 'Hong Kong (HKT)' },
   { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
-  { value: 'America/Toronto', label: 'Toronto (EST/EDT)' },
-  { value: 'America/Vancouver', label: 'Vancouver (PST/PDT)' },
-  { value: 'America/Winnipeg', label: 'Winnipeg (CST/CDT)' },
-  { value: 'Europe/Zurich', label: 'Zurich (CET/CEST)' },
+  { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
 ]
 
+const schema = z.object({
+  city_name: z.string().min(1).max(255),
+  country: z.string().max(100).nullable().optional(),
+  timezone: z.string().min(1),
+  language: z.string().min(2).max(10),
+  event_tagline: z.string().max(255).nullable().optional(),
+  email_provider: z.enum(['resend', 'smtp']),
+  resend_api_key: z.string().nullable().optional(),
+  from_email: z.union([z.string().email(), z.literal('')]).nullable().optional(),
+  smtp_host: z.string().nullable().optional(),
+  smtp_port: z.number().int().positive().max(65535).nullable().optional(),
+  smtp_secure: z.boolean().optional(),
+  smtp_user: z.string().nullable().optional(),
+  smtp_password: z.string().nullable().optional(),
+  luma_api_key: z.string().nullable().optional(),
+  luma_calendar_id: z.string().max(100).nullable().optional(),
+})
+type FormValues = z.infer<typeof schema>
+
 export default function SettingsPage() {
-  const searchParams = useSearchParams()
-  const isSetupMode = searchParams.get('setup') === 'true'
-  
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [timezoneOpen, setTimezoneOpen] = useState(false)
-  const [showResendKey, setShowResendKey] = useState(false)
+  const [tzOpen, setTzOpen] = useState(false)
 
-  const form = useForm<SettingsFormData>({
-    resolver: zodResolver(settingsSchema),
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
     defaultValues: {
       city_name: '',
-      timezone: 'America/Toronto',
+      country: '',
+      timezone: 'America/Mexico_City',
+      language: 'en',
+      event_tagline: '',
+      email_provider: 'resend',
       resend_api_key: '',
+      from_email: '',
+      smtp_host: '',
+      smtp_port: null,
+      smtp_secure: false,
+      smtp_user: '',
+      smtp_password: '',
+      luma_api_key: '',
+      luma_calendar_id: '',
     },
   })
 
-  // Fetch current settings on mount
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await fetch('/api/admin/settings')
-        if (response.ok) {
-          const settings: AppSettings = await response.json()
-          form.reset({
-            city_name: settings.city_name,
-            timezone: settings.timezone,
-            resend_api_key: settings.resend_api_key || '',
-          })
-        }
-      } catch (error) {
-        console.error('Failed to fetch settings:', error)
-        toast.error('Failed to load settings')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchSettings()
+    fetch('/api/admin/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        form.reset({
+          city_name: s.city_name ?? '',
+          country: s.country ?? '',
+          timezone: s.timezone ?? 'America/Mexico_City',
+          language: s.language ?? 'en',
+          event_tagline: s.event_tagline ?? '',
+          email_provider: s.email_provider ?? 'resend',
+          // Secrets: if set, seed with sentinel so the form knows not to overwrite.
+          resend_api_key: s.resend_api_key_set ? UNCHANGED : '',
+          from_email: s.from_email ?? '',
+          smtp_host: s.smtp_host ?? '',
+          smtp_port: s.smtp_port ?? null,
+          smtp_secure: s.smtp_secure ?? false,
+          smtp_user: s.smtp_user ?? '',
+          smtp_password: s.smtp_password_set ? UNCHANGED : '',
+          luma_api_key: s.luma_api_key_set ? UNCHANGED : '',
+          luma_calendar_id: s.luma_calendar_id ?? '',
+        })
+        setMasks({
+          resend: s.resend_api_key_masked ?? '',
+          smtp: s.smtp_password_masked ?? '',
+          luma: s.luma_api_key_masked ?? '',
+        })
+      })
+      .catch(() => toast.error('Failed to load settings'))
+      .finally(() => setLoading(false))
   }, [form])
 
-  const onSubmit = async (data: SettingsFormData) => {
-    setSaving(true)
+  const [masks, setMasks] = useState<{ resend: string; smtp: string; luma: string }>({ resend: '', smtp: '', luma: '' })
 
+  const onSubmit = async (data: FormValues) => {
+    setSaving(true)
     try {
-      const response = await fetch('/api/admin/settings', {
+      const res = await fetch('/api/admin/settings', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-
-      if (!response.ok) {
-        const result = await response.json()
-        toast.error(result.error || 'Failed to save settings')
-        setSaving(false)
-        return
-      }
-
-      toast.success('Settings saved successfully')
-      
-      // If in setup mode, show a welcome message
-      if (isSetupMode) {
-        toast.success('Welcome! Your city is now configured.', {
-          description: 'You can access all admin features from the sidebar.',
-        })
-      }
+      if (!res.ok) throw new Error('Failed')
+      // Reload to pick up fresh masked previews if the key changed.
+      const refreshed = await res.json()
+      form.setValue(
+        'resend_api_key',
+        refreshed.resend_api_key_set ? UNCHANGED : '',
+      )
+      form.setValue('luma_api_key', refreshed.luma_api_key_set ? UNCHANGED : '')
+      form.setValue('smtp_password', refreshed.smtp_password_set ? UNCHANGED : '')
+      setMasks({
+        resend: refreshed.resend_api_key_masked ?? '',
+        smtp: refreshed.smtp_password_masked ?? '',
+        luma: refreshed.luma_api_key_masked ?? '',
+      })
+      toast.success('Settings saved')
     } catch {
-      toast.error('An unexpected error occurred')
+      toast.error('Could not save settings')
     } finally {
       setSaving(false)
     }
@@ -167,94 +154,86 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 mt-3">
+    <div className="space-y-8 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-medium font-sans flex items-center gap-2">
-          <Settings className="h-6 w-6" />
-          Settings
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Configure your city&apos;s Cafe Cursor deployment
+        <h1 className="font-display text-3xl tracking-tight">Settings</h1>
+        <p className="mt-1 text-muted-foreground">
+          City identity, branding, and integration API keys.
         </p>
       </div>
 
-      {isSetupMode && (
-        <Alert className="bg-emerald-950/30 border-emerald-800">
-          <Sparkles className="h-4 w-4 text-emerald-400" />
-          <AlertTitle className="text-emerald-100">Welcome to Cafe Cursor!</AlertTitle>
-          <AlertDescription className="text-emerald-200/80">
-            You&apos;re the first admin for this deployment. Please configure your city settings below to get started.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>City Configuration</CardTitle>
-          <CardDescription>
-            These settings are displayed throughout your Cafe Cursor instance
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>City</CardTitle>
+              <CardDescription>Displayed throughout your deployment.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
               <FormField
                 control={form.control}
                 name="city_name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>City Name</FormLabel>
+                    <FormLabel>Name</FormLabel>
                     <div className="flex items-center gap-3">
-                      <span className="text-muted-foreground whitespace-nowrap">Cafe Cursor</span>
+                      <span className="text-muted-foreground font-tagline text-[15px] shrink-0">
+                        Cafe Cursor
+                      </span>
                       <FormControl>
-                        <Input
-                          placeholder="Toronto"
-                          {...field}
-                        />
+                        <Input placeholder="Mexico City" {...field} />
                       </FormControl>
                     </div>
-                    <FormDescription>
-                      Enter just the city name (e.g., &quot;Toronto&quot;, &quot;Chiang Mai&quot;)
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
+              <FormField
+                control={form.control}
+                name="country"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Country</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Mexico" {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="timezone"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Timezone</FormLabel>
-                    <Popover open={timezoneOpen} onOpenChange={setTimezoneOpen}>
+                    <Popover open={tzOpen} onOpenChange={setTzOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
+                            type="button"
                             variant="outline"
+                            shape="rounded"
                             role="combobox"
-                            aria-expanded={timezoneOpen}
                             className={cn(
-                              "w-full justify-between",
-                              !field.value && "text-muted-foreground"
+                              'w-full justify-between font-normal',
+                              !field.value && 'text-muted-foreground',
                             )}
                           >
-                            {field.value
-                              ? TIMEZONES.find((tz) => tz.value === field.value)?.label
-                              : "Select timezone..."}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            {TIMEZONES.find((tz) => tz.value === field.value)?.label || 'Select timezone…'}
+                            <ChevronsUpDown className="size-4 opacity-50" />
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
                       <PopoverContent className="w-[400px] p-0" align="start">
                         <Command>
-                          <CommandInput placeholder="Search timezone..." />
+                          <CommandInput placeholder="Search timezone…" />
                           <CommandList>
                             <CommandEmpty>No timezone found.</CommandEmpty>
                             <CommandGroup>
@@ -264,13 +243,13 @@ export default function SettingsPage() {
                                   value={tz.label}
                                   onSelect={() => {
                                     field.onChange(tz.value)
-                                    setTimezoneOpen(false)
+                                    setTzOpen(false)
                                   }}
                                 >
                                   <Check
                                     className={cn(
-                                      "mr-2 h-4 w-4",
-                                      field.value === tz.value ? "opacity-100" : "opacity-0"
+                                      'mr-2 size-4',
+                                      field.value === tz.value ? 'opacity-100' : 'opacity-0',
                                     )}
                                   />
                                   {tz.label}
@@ -281,94 +260,352 @@ export default function SettingsPage() {
                         </Command>
                       </PopoverContent>
                     </Popover>
-                    <FormDescription>
-                      Used for date and time formatting throughout the app
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Key className="h-5 w-5" />
-            Integrations
-          </CardTitle>
-          <CardDescription>
-            Configure API keys for external services
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
                 control={form.control}
-                name="resend_api_key"
+                name="event_tagline"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Resend API Key</FormLabel>
-                    <div className="relative">
-                      <FormControl>
-                        <Input
-                          type={showResendKey ? 'text' : 'password'}
-                          placeholder="Enter your Resend API key"
-                          {...field}
-                          value={field.value || ''}
-                          className="pr-10"
-                        />
-                      </FormControl>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowResendKey(!showResendKey)}
-                      >
-                        {showResendKey ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
+                    <FormLabel>Tagline</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Builders, coffee, and good vibes." {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormDescription>Shown on public pages.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Key className="size-5" /> Integrations
+              </CardTitle>
+              <CardDescription>
+                API keys are stored locally. Once saved they&apos;re never sent back to the browser — you&apos;ll only see a masked preview.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <FormField
+                control={form.control}
+                name="email_provider"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email provider</FormLabel>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { value: 'resend', label: 'Resend', hint: 'Free 3k/mo, verified domain.' },
+                        { value: 'smtp', label: 'Gmail / SMTP', hint: 'Use your own Gmail (App Password).' },
+                      ].map((p) => (
+                        <button
+                          key={p.value}
+                          type="button"
+                          onClick={() => {
+                            field.onChange(p.value)
+                            if (p.value === 'smtp' && !form.getValues('smtp_host')) {
+                              form.setValue('smtp_host', 'smtp.gmail.com')
+                              form.setValue('smtp_port', 587)
+                              form.setValue('smtp_secure', false)
+                            }
+                          }}
+                          className={cn(
+                            'h-auto px-4 py-3 rounded-[12px] text-left border transition-colors',
+                            field.value === p.value
+                              ? 'bg-foreground text-background border-foreground'
+                              : 'bg-transparent border-border hover:bg-muted',
+                          )}
+                        >
+                          <div className="font-medium text-sm">{p.label}</div>
+                          <div className={cn(
+                            'text-xs mt-0.5',
+                            field.value === p.value ? 'text-background/70' : 'text-muted-foreground',
+                          )}>
+                            {p.hint}
+                          </div>
+                        </button>
+                      ))}
                     </div>
                     <FormDescription>
-                      Required for sending coupon code emails.{' '}
-                      <a 
-                        href="https://resend.com/api-keys" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        Get your API key from Resend
-                      </a>
+                      Guides:{' '}
+                      <a href="/docs/resend" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-foreground">Resend</a>
+                      {' '}·{' '}
+                      <a href="/docs/gmail" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-foreground">Gmail SMTP</a>
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <Button type="submit" disabled={saving}>
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2 h-4 w-4" />
-                    Save Settings
-                  </>
+              {form.watch('email_provider') === 'resend' && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="resend_api_key"
+                    render={({ field }) => (
+                      <SecretField
+                        label="Resend API key"
+                        placeholder="re_…"
+                        field={field}
+                        masked={masks.resend}
+                        onClear={() => setMasks((m) => ({ ...m, resend: '' }))}
+                        description={
+                          <>
+                            Required for sending credit-code emails.{' '}
+                            <a
+                              href="/docs/resend"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline underline-offset-4 hover:text-foreground"
+                            >
+                              Full setup guide →
+                            </a>
+                          </>
+                        }
+                      />
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="from_email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>From email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="hello@yourdomain.com" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormDescription>Must be verified in Resend. Defaults to the sandbox sender if unset.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
+              {form.watch('email_provider') === 'smtp' && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="smtp_user"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email address</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="you@gmail.com" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormDescription>
+                          The Gmail account that will send the messages.{' '}
+                          <a href="/docs/gmail" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-foreground">
+                            How to get an App Password →
+                          </a>
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="smtp_password"
+                    render={({ field }) => (
+                      <SecretField
+                        label="App password"
+                        placeholder="16-char App Password (not your Gmail password)"
+                        field={field}
+                        masked={masks.smtp}
+                        onClear={() => setMasks((m) => ({ ...m, smtp: '' }))}
+                        description={<>Generate at Google Account → Security → App passwords.</>}
+                      />
+                    )}
+                  />
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="smtp_host"
+                      render={({ field }) => (
+                        <FormItem className="col-span-2">
+                          <FormLabel>SMTP host</FormLabel>
+                          <FormControl>
+                            <Input placeholder="smtp.gmail.com" {...field} value={field.value ?? ''} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="smtp_port"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Port</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="587"
+                              value={field.value ?? ''}
+                              onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="from_email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>From email <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="hello@yourdomain.com" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormDescription>Defaults to the Gmail address above if unset.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+              <div className="h-px bg-border" />
+              <FormField
+                control={form.control}
+                name="luma_api_key"
+                render={({ field }) => (
+                  <SecretField
+                    label="Luma API key"
+                    placeholder="secret-…"
+                    field={field}
+                    masked={masks.luma}
+                    onClear={() => setMasks((m) => ({ ...m, luma: '' }))}
+                    description={
+                      <>
+                        From your Luma calendar: <span className="font-medium">Settings → Developer → API Keys</span>.
+                      </>
+                    }
+                  />
                 )}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+              />
+              <FormField
+                control={form.control}
+                name="luma_calendar_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Luma Calendar ID <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="cal-…" {...field} value={field.value ?? ''} className="font-code" />
+                    </FormControl>
+                    <FormDescription>
+                      Shown at the bottom of the Developer settings page. Only needed if your key has access to multiple calendars.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Saving…
+                </>
+              ) : (
+                <>
+                  <Save className="size-4" /> Save settings
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </Form>
     </div>
+  )
+}
+
+/**
+ * Three-state secret input:
+ *  - unset: plain password field
+ *  - set (server has a value): shows masked preview, locked, with "Change" button
+ *  - changing: back to a plain password field, with an eye toggle
+ */
+function SecretField({
+  label,
+  placeholder,
+  field,
+  masked,
+  description,
+  onClear,
+}: {
+  label: string
+  placeholder: string
+  field: { value?: string | null; onChange: (v: string) => void; onBlur: () => void; name: string }
+  masked: string
+  description: React.ReactNode
+  onClear: () => void
+}) {
+  const [reveal, setReveal] = useState(false)
+  const isUnchanged = field.value === UNCHANGED
+  const hasSaved = Boolean(masked)
+
+  if (isUnchanged && hasSaved) {
+    return (
+      <FormItem>
+        <FormLabel>{label}</FormLabel>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2 h-10 px-3 rounded-full border border-border bg-muted/40 font-code text-sm">
+            <Lock className="size-3.5 text-muted-foreground shrink-0" />
+            <span className="truncate">{masked}</span>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              field.onChange('')
+              onClear()
+            }}
+          >
+            <Pencil className="size-3.5" /> Change
+          </Button>
+        </div>
+        <FormDescription>{description}</FormDescription>
+        <FormMessage />
+      </FormItem>
+    )
+  }
+
+  return (
+    <FormItem>
+      <FormLabel>{label}</FormLabel>
+      <div className="relative">
+        <FormControl>
+          <Input
+            type={reveal ? 'text' : 'password'}
+            placeholder={placeholder}
+            value={field.value ?? ''}
+            onChange={(e) => field.onChange(e.target.value)}
+            onBlur={field.onBlur}
+            name={field.name}
+            className="pr-10 font-code"
+            autoComplete="off"
+          />
+        </FormControl>
+        <button
+          type="button"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          onClick={() => setReveal((v) => !v)}
+          tabIndex={-1}
+        >
+          {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </button>
+      </div>
+      <FormDescription>{description}</FormDescription>
+      <FormMessage />
+    </FormItem>
   )
 }

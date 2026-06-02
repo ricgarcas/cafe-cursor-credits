@@ -3,9 +3,17 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, Ticket, LogOut, Settings } from 'lucide-react'
-import { User } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/client'
+import {
+  LayoutDashboard,
+  Users,
+  Ticket,
+  LogOut,
+  Settings,
+  Sparkles,
+  QrCode,
+  CalendarDays,
+} from 'lucide-react'
+type AdminUser = { email: string; name?: string }
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -16,85 +24,98 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Wordmark } from '@/components/brand/logo'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 const navigation = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   { name: 'Attendees', href: '/admin/attendees', icon: Users },
   { name: 'Coupons', href: '/admin/coupons', icon: Ticket },
+  { name: 'QR cards', href: '/admin/qr-cards', icon: QrCode },
+  { name: 'Luma', href: '/admin/luma', icon: CalendarDays },
   { name: 'Settings', href: '/admin/settings', icon: Settings },
 ]
 
-interface AdminSidebarProps {
-  user: User
+interface Props {
+  user: AdminUser
 }
 
-export function AdminSidebar({ user }: AdminSidebarProps) {
+export function AdminSidebar({ user }: Props) {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
+    await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/login')
     router.refresh()
   }
 
-  const initials = user.email
-    ?.split('@')[0]
-    .split('.')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || 'AD'
+  const initials =
+    user.email
+      ?.split('@')[0]
+      .split('.')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2) || 'AD'
 
   return (
     <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-      <div className="flex min-h-0 flex-1 flex-col bg-black border-r border-dashed border-sidebar-border">
-        <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
-          <div className="flex items-center px-5 pt-3 gap-3">
-            <img src="/assets/cursor-cube-logo-dark.svg" alt="Cursor Logo" className="h-8 w-8" />
-            <span className="text-2xl font-medium font-sans text-sidebar-foreground">Cafe Cursor</span>
-          </div>
-          <nav className="mt-6 flex-1 space-y-1 px-2">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={cn(
-                    'group flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
-                    isActive
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                  )}
-                >
-                  <item.icon
-                    className={cn(
-                      'mr-3 size-4.5 flex-shrink-0',
-                      isActive ? 'text-sidebar-primary' : 'text-sidebar-foreground/50 group-hover:text-sidebar-primary'
-                    )}
-                  />
-                  {item.name}
-                </Link>
-              )
-            })}
-          </nav>
+      <div className="flex min-h-0 flex-1 flex-col bg-sidebar border-r border-sidebar-border">
+        <div className="px-5 h-16 flex items-center border-b border-sidebar-border">
+          <Wordmark />
         </div>
-        
-        {/* User Menu at Bottom */}
-        <div className="border-t border-dashed border-sidebar-border p-4">
+
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          {navigation.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={cn(
+                  'group flex items-center gap-3 px-3 h-9 rounded-full text-sm transition-colors',
+                  isActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                )}
+              >
+                <item.icon className="size-4 shrink-0" />
+                {item.name}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="mx-3 mb-3">
+          <Link
+            href="/claim"
+            className="block rounded-[10px] border border-sidebar-border bg-[color:var(--brand-green-soft)] px-3 py-2.5 text-xs leading-snug text-sidebar-foreground hover:bg-[color:var(--brand-green-soft)]/70 transition-colors"
+          >
+            <div className="flex items-center gap-2 font-medium text-sidebar-foreground">
+              <Sparkles className="size-3.5 text-[color:var(--brand-green)]" />
+              On-site claim portal
+            </div>
+            <div className="mt-0.5 text-sidebar-foreground/70">
+              Attendees get codes instantly, no email needed.
+            </div>
+          </Link>
+        </div>
+
+        <div className="border-t border-sidebar-border p-3 flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start gap-3 h-auto py-1.5 px-2">
-                <Avatar className="h-8 w-8">
+              <Button variant="ghost" shape="rounded" className="flex-1 justify-start gap-3 h-auto py-1.5 px-2">
+                <Avatar className="size-8">
                   <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-xs">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex flex-col items-start text-left">
-                  <span className="text-sm font-medium text-sidebar-foreground">Admin</span>
-                  <span className="text-xs text-sidebar-foreground/60 truncate max-w-[140px]">{user.email}</span>
+                <div className="flex flex-col items-start text-left min-w-0">
+                  <span className="text-sm font-medium">Admin</span>
+                  <span className="text-xs text-sidebar-foreground/60 truncate max-w-[140px]">
+                    {user.email}
+                  </span>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -106,18 +127,15 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="cursor-pointer"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
+              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                <LogOut className="mr-2 size-4" />
                 <span>Log out</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <ThemeToggle />
         </div>
       </div>
     </aside>
   )
 }
-

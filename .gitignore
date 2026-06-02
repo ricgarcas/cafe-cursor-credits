@@ -36,6 +36,18 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local SQLite databases
+/data/*.db
+/data/*.db-shm
+/data/*.db-wal
+
+# test artifacts
+/test-results
+/playwright-report
+
+# editor / AI tooling
+/.cursor
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

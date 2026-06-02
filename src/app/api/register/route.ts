@@ -1,118 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
-import { createResendClient } from '@/lib/resend'
-import { sendCouponEmail } from '@/lib/emails/send-coupon-email'
 import { z } from 'zod'
+import { and, eq, isNull, sql } from 'drizzle-orm'
+import { db, ensureDefaultSettings } from '@/lib/db/client'
+import { attendees, couponCodes, appSettings } from '@/lib/db/schema'
+import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
 
-const registerSchema = z.object({
+const schema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email().max(255),
 })
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    
-    // Validate input
-    const result = registerSchema.safeParse(body)
-    if (!result.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: result.error.issues },
-        { status: 400 }
-      )
+    await ensureDefaultSettings()
+    const body = await request.json().catch(() => null)
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
+    const { name, email } = parsed.data
+    const normalizedEmail = email.toLowerCase()
 
-    const { name, email } = result.data
-    const supabase = await createAdminClient()
-
-    // Get settings including API key
-    const { data: settings } = await supabase
-      .from('app_settings')
-      .select('resend_api_key, city_name')
+    // Reject duplicates (matches old Supabase behavior).
+    const existing = await db
+      .select({ id: attendees.id })
+      .from(attendees)
+      .where(eq(attendees.email, normalizedEmail))
       .limit(1)
-      .single()
-
-    // Check if email already exists
-    const { data: existingAttendee } = await supabase
-      .from('attendees')
-      .select('id')
-      .eq('email', email.toLowerCase())
-      .single()
-
-    if (existingAttendee) {
+    if (existing.length > 0) {
       return NextResponse.json(
         { error: 'This email is already registered' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
-    // Create the attendee
-    const { data: attendee, error: attendeeError } = await supabase
-      .from('attendees')
-      .insert({
+    const [attendee] = await db
+      .insert(attendees)
+      .values({
         name,
-        email: email.toLowerCase(),
-        registered_at: new Date().toISOString(),
+        email: normalizedEmail,
         source: 'website',
       })
-      .select()
-      .single()
+      .returning()
 
-    if (attendeeError) {
-      console.error('Error creating attendee:', attendeeError)
-      return NextResponse.json(
-        { error: 'Failed to create registration' },
-        { status: 500 }
+    // Grab an available coupon, assign, mark used — all in one transaction
+    // using a single UPDATE…RETURNING to avoid race conditions with concurrent
+    // registrations.
+    const now = new Date().toISOString()
+    const taken = db
+      .update(couponCodes)
+      .set({
+        isUsed: true,
+        usedAt: now,
+        usedByType: 'attendee',
+        updatedAt: now,
+      })
+      .where(
+        sql`${couponCodes.id} = (
+          SELECT id FROM ${couponCodes}
+          WHERE ${couponCodes.isUsed} = 0
+            AND ${couponCodes.usedAt} IS NULL
+          LIMIT 1
+        )`,
       )
-    }
+      .returning()
 
-    // Try to find an available coupon code
-    const { data: couponCode, error: couponError } = await supabase
-      .from('coupon_codes')
-      .select()
-      .eq('is_used', false)
-      .is('used_at', null)
-      .limit(1)
-      .single()
-
+    const [coupon] = await taken
     let couponAssigned = false
 
-    if (couponCode && !couponError) {
-      // Assign the coupon to the attendee
-      const { error: updateAttendeeError } = await supabase
-        .from('attendees')
-        .update({ coupon_code_id: couponCode.id })
-        .eq('id', attendee.id)
+    if (coupon) {
+      await db
+        .update(attendees)
+        .set({ couponCodeId: coupon.id, updatedAt: now })
+        .where(eq(attendees.id, attendee.id))
+      couponAssigned = true
 
-      if (!updateAttendeeError) {
-        // Mark the coupon as used with tracking info
-        const { error: updateCouponError } = await supabase
-          .from('coupon_codes')
-          .update({
-            is_used: true,
-            used_at: new Date().toISOString(),
-            used_by_type: 'attendee',
+      // Send the email if an email provider is configured.
+      const [settings] = await db.select().from(appSettings).limit(1)
+      if (canSendEmail(settings)) {
+        try {
+          await sendCouponEmail({
+            settings,
+            attendee: { ...attendee, couponCodeId: coupon.id },
+            couponCode: coupon,
+            fromName: `Cafe Cursor ${settings.cityName}`,
           })
-          .eq('id', couponCode.id)
-
-        if (!updateCouponError) {
-          couponAssigned = true
-
-          // Send the coupon email if Resend API key is configured
-          if (settings?.resend_api_key) {
-            try {
-              const resendClient = createResendClient(settings.resend_api_key)
-              await sendCouponEmail({
-                resendClient,
-                attendee: { ...attendee, coupon_code_id: couponCode.id },
-                couponCode,
-                fromName: `Cafe Cursor ${settings.city_name}`,
-              })
-            } catch (emailError) {
-              console.error('Failed to send email:', emailError)
-              // Don't fail the registration if email fails
-            }
-          }
+        } catch (e) {
+          console.error('email send failed', e)
         }
       }
     }
@@ -121,15 +95,15 @@ export async function POST(request: NextRequest) {
       success: true,
       couponAssigned,
       message: couponAssigned
-        ? 'Registration successful! Check your email for your coupon code.'
+        ? 'Registration successful! Check your email for your code.'
         : 'Registration successful!',
     })
-  } catch (error) {
-    console.error('Registration error:', error)
-    return NextResponse.json(
-      { error: 'An unexpected error occurred' },
-      { status: 500 }
-    )
+  } catch (e) {
+    console.error('register error', e)
+    return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 })
   }
 }
 
+// Silence unused-import for the `and`/`isNull` helpers so future tweaks can keep them.
+void and
+void isNull

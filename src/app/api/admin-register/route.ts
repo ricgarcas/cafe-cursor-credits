@@ -1,121 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
 import { z } from 'zod'
+import { db, ensureDefaultSettings } from '@/lib/db/client'
+import { createUser, countUsers, findUserByEmail } from '@/lib/auth/users'
+import { getSession } from '@/lib/auth/session'
 
-const adminRegisterSchema = z.object({
+const schema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email().max(255),
-  password: z.string().min(6),
-  registrationSecret: z.string().min(1),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
 })
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    
-    // Validate input
-    const result = adminRegisterSchema.safeParse(body)
-    if (!result.success) {
+    const body = await request.json().catch(() => null)
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
+    }
+    const { name, email, password } = parsed.data
+
+    await ensureDefaultSettings()
+
+    // Bootstrap-only: this endpoint creates the first admin. Once any user
+    // exists, new admin accounts must be provisioned by a signed-in admin
+    // via a different flow (future work).
+    if ((await countUsers()) > 0) {
       return NextResponse.json(
-        { error: 'Invalid input', details: result.error.issues },
-        { status: 400 }
+        { error: 'An admin already exists. Please sign in.' },
+        { status: 403 },
       )
     }
 
-    const { name, email, password, registrationSecret } = result.data
-
-    // Validate registration secret
-    const expectedSecret = process.env.ADMIN_REGISTRATION_SECRET
-    if (!expectedSecret) {
-      console.error('ADMIN_REGISTRATION_SECRET environment variable is not set')
+    if (await findUserByEmail(email)) {
       return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
+        { error: 'An account with this email already exists' },
+        { status: 400 },
       )
     }
 
-    if (registrationSecret !== expectedSecret) {
-      return NextResponse.json(
-        { error: 'Invalid registration secret' },
-        { status: 401 }
-      )
-    }
+    const user = await createUser({ name, email, password })
 
-    const supabase = await createAdminClient()
+    // Auto-login.
+    const session = await getSession()
+    session.userId = user.id
+    session.email = user.email
+    session.name = user.name
+    await session.save()
 
-    // Create the auth user using admin client
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true, // Auto-confirm email for admin users
-      user_metadata: {
-        name,
-        role: 'admin',
-      },
-    })
-
-    if (authError) {
-      console.error('Error creating auth user:', authError)
-      
-      // Handle specific error cases
-      if (authError.message.includes('already registered')) {
-        return NextResponse.json(
-          { error: 'An account with this email already exists' },
-          { status: 400 }
-        )
-      }
-      
-      return NextResponse.json(
-        { error: 'Failed to create admin account' },
-        { status: 500 }
-      )
-    }
-
-    if (!authData.user) {
-      return NextResponse.json(
-        { error: 'Failed to create user' },
-        { status: 500 }
-      )
-    }
-
-    // Check if this is the first admin (no settings exist)
-    const { data: settings, error: settingsError } = await supabase
-      .from('app_settings')
-      .select('id')
-      .limit(1)
-      .single()
-
-    // If no settings exist or there's an error (table might be empty), 
-    // this is the first admin - create default settings
-    let isFirstAdmin = false
-    if (settingsError || !settings) {
-      isFirstAdmin = true
-      
-      // Insert default settings
-      const { error: insertError } = await supabase
-        .from('app_settings')
-        .insert({
-          city_name: 'Cafe Cursor',
-          timezone: 'America/Toronto',
-        })
-
-      if (insertError) {
-        console.error('Error creating default settings:', insertError)
-        // Don't fail registration if settings creation fails
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Admin account created successfully',
-      redirect: isFirstAdmin ? '/admin/settings?setup=true' : '/admin/dashboard',
-    })
-  } catch (error) {
-    console.error('Admin registration error:', error)
-    return NextResponse.json(
-      { error: 'An unexpected error occurred' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: true, redirect: '/onboarding' })
+  } catch (e) {
+    console.error('admin-register error', e)
+    return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 })
   }
 }
 
+void db

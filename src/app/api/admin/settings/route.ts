@@ -1,163 +1,164 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { z } from 'zod'
+import { eq } from 'drizzle-orm'
+import { db, ensureDefaultSettings } from '@/lib/db/client'
+import { appSettings } from '@/lib/db/schema'
+import { requireUser } from '@/lib/auth/guard'
+import { maskSecret, isUnchanged } from '@/lib/secrets'
 
-const settingsUpdateSchema = z.object({
+const schema = z.object({
   city_name: z.string().min(1).max(255),
   timezone: z.string().min(1).max(100),
-  luma_event_id: z.string().nullable().optional(),
-  luma_api_key: z.string().nullable().optional(),
+  country: z.string().max(100).nullable().optional(),
+  language: z.string().min(2).max(10).optional(),
+  brand_accent: z.enum(['orange', 'green', 'violet', 'blue']).optional(),
+  event_tagline: z.string().max(255).nullable().optional(),
+  onboarded: z.boolean().optional(),
+
+  // Email provider + credentials.
+  email_provider: z.enum(['resend', 'smtp']).optional(),
   resend_api_key: z.string().nullable().optional(),
+  from_email: z.union([z.string().email(), z.literal('')]).nullable().optional(),
+  smtp_host: z.string().max(255).nullable().optional(),
+  smtp_port: z.number().int().positive().max(65535).nullable().optional(),
+  smtp_secure: z.boolean().optional(),
+  smtp_user: z.string().max(255).nullable().optional(),
+  smtp_password: z.string().nullable().optional(),
+
+  luma_api_key: z.string().nullable().optional(),
+  luma_calendar_id: z.string().max(100).nullable().optional(),
+  luma_event_id: z.string().nullable().optional(),
 })
 
-// Default settings to return if table doesn't exist or is empty
-const DEFAULT_SETTINGS = {
-  id: 0,
-  city_name: 'Cafe Cursor',
-  timezone: 'America/Toronto',
-  luma_event_id: null as string | null,
-  luma_api_key: null as string | null,
-  resend_api_key: null as string | null,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-}
+function rowToDto(row: typeof appSettings.$inferSelect) {
+  return {
+    id: row.id,
+    city_name: row.cityName,
+    country: row.country,
+    timezone: row.timezone,
+    language: row.language,
+    brand_accent: row.brandAccent,
+    event_tagline: row.eventTagline,
+    onboarded: row.onboarded,
 
-// GET - Fetch current settings
-export async function GET() {
-  try {
-    const supabase = await createClient()
-    
-    // Check if user is authenticated
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    email_provider: row.emailProvider,
+    from_email: row.fromEmail,
+    smtp_host: row.smtpHost,
+    smtp_port: row.smtpPort,
+    smtp_secure: row.smtpSecure,
+    smtp_user: row.smtpUser,
 
-    // Fetch settings using admin client to ensure we can read
-    const adminSupabase = await createAdminClient()
-    const { data: settings, error } = await adminSupabase
-      .from('app_settings')
-      .select('*')
-      .limit(1)
-      .single()
-
-    if (error) {
-      // If table doesn't exist or no rows, return defaults
-      console.log('Settings not found, returning defaults:', error.message)
-      return NextResponse.json(DEFAULT_SETTINGS)
-    }
-
-    return NextResponse.json(settings)
-  } catch (error) {
-    console.error('Settings GET error:', error)
-    // Return defaults on any error
-    return NextResponse.json(DEFAULT_SETTINGS)
+    luma_calendar_id: row.lumaCalendarId,
+    luma_event_id: row.lumaEventId,
+    // Secrets: never send raw values to the browser. Masked preview + boolean.
+    resend_api_key: null,
+    resend_api_key_masked: maskSecret(row.resendApiKey),
+    resend_api_key_set: Boolean(row.resendApiKey),
+    smtp_password: null,
+    smtp_password_masked: maskSecret(row.smtpPassword),
+    smtp_password_set: Boolean(row.smtpPassword),
+    luma_api_key: null,
+    luma_api_key_masked: maskSecret(row.lumaApiKey),
+    luma_api_key_set: Boolean(row.lumaApiKey),
+    created_at: row.createdAt,
+    updated_at: row.updatedAt,
   }
 }
 
-// PUT - Update settings
+export async function GET() {
+  const gate = await requireUser()
+  if ('response' in gate) return gate.response
+  await ensureDefaultSettings()
+  const [row] = await db.select().from(appSettings).limit(1)
+  if (!row) {
+    return NextResponse.json({
+      id: 0,
+      city_name: 'Cafe Cursor',
+      timezone: 'America/Mexico_City',
+      language: 'en',
+      brand_accent: 'orange',
+      onboarded: false,
+      country: null,
+      event_tagline: null,
+      email_provider: 'resend',
+      from_email: null,
+      smtp_host: null,
+      smtp_port: null,
+      smtp_secure: false,
+      smtp_user: null,
+      smtp_password: null,
+      smtp_password_masked: null,
+      smtp_password_set: false,
+      luma_calendar_id: null,
+      luma_event_id: null,
+      resend_api_key: null,
+      resend_api_key_masked: null,
+      resend_api_key_set: false,
+      luma_api_key: null,
+      luma_api_key_masked: null,
+      luma_api_key_set: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+  }
+  return NextResponse.json(rowToDto(row))
+}
+
 export async function PUT(request: NextRequest) {
-  try {
-    const supabase = await createClient()
-    
-    // Check if user is authenticated
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    const body = await request.json()
-    
-    // Validate input
-    const result = settingsUpdateSchema.safeParse(body)
-    if (!result.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: result.error.issues },
-        { status: 400 }
-      )
-    }
-
-    const { city_name, timezone, luma_event_id, luma_api_key, resend_api_key } = result.data
-
-    // Use admin client to update settings (bypasses RLS)
-    const adminSupabase = await createAdminClient()
-    
-    // Get the current settings row ID first
-    const { data: currentSettings, error: fetchError } = await adminSupabase
-      .from('app_settings')
-      .select('id')
-      .limit(1)
-      .single()
-
-    // Build update object (only include optional fields if explicitly provided)
-    const updateData: { 
-      city_name: string
-      timezone: string
-      luma_event_id?: string | null
-      luma_api_key?: string | null
-      resend_api_key?: string | null
-    } = { 
-      city_name, 
-      timezone 
-    }
-    if (luma_event_id !== undefined) {
-      updateData.luma_event_id = luma_event_id
-    }
-    if (luma_api_key !== undefined) {
-      updateData.luma_api_key = luma_api_key
-    }
-    if (resend_api_key !== undefined) {
-      updateData.resend_api_key = resend_api_key
-    }
-
-    if (fetchError || !currentSettings) {
-      // If no settings exist, create them
-      const { data: newSettings, error: insertError } = await adminSupabase
-        .from('app_settings')
-        .insert(updateData)
-        .select()
-        .single()
-
-      if (insertError) {
-        console.error('Error creating settings:', insertError)
-        return NextResponse.json(
-          { error: 'Failed to create settings' },
-          { status: 500 }
-        )
-      }
-
-      return NextResponse.json(newSettings)
-    }
-
-    // Update existing settings
-    const { data: updatedSettings, error: updateError } = await adminSupabase
-      .from('app_settings')
-      .update(updateData)
-      .eq('id', currentSettings.id)
-      .select()
-      .single()
-
-    if (updateError) {
-      console.error('Error updating settings:', updateError)
-      return NextResponse.json(
-        { error: 'Failed to update settings' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json(updatedSettings)
-  } catch (error) {
-    console.error('Settings PUT error:', error)
+  const gate = await requireUser()
+  if ('response' in gate) return gate.response
+  const body = await request.json().catch(() => null)
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: 'An unexpected error occurred' },
-      { status: 500 }
+      { error: 'Invalid input', details: parsed.error.issues },
+      { status: 400 },
     )
   }
-}
 
+  await ensureDefaultSettings()
+  const [existing] = await db.select().from(appSettings).limit(1)
+
+  const update: Partial<typeof appSettings.$inferInsert> = {
+    cityName: parsed.data.city_name,
+    timezone: parsed.data.timezone,
+    updatedAt: new Date().toISOString(),
+  }
+  if (parsed.data.country !== undefined) update.country = parsed.data.country
+  if (parsed.data.language !== undefined) update.language = parsed.data.language
+  if (parsed.data.brand_accent !== undefined) update.brandAccent = parsed.data.brand_accent
+  if (parsed.data.event_tagline !== undefined) update.eventTagline = parsed.data.event_tagline
+  if (parsed.data.onboarded !== undefined) update.onboarded = parsed.data.onboarded
+  if (parsed.data.from_email !== undefined)
+    update.fromEmail = parsed.data.from_email ? parsed.data.from_email : null
+  if (parsed.data.email_provider !== undefined) update.emailProvider = parsed.data.email_provider
+  if (parsed.data.smtp_host !== undefined) update.smtpHost = parsed.data.smtp_host
+  if (parsed.data.smtp_port !== undefined) update.smtpPort = parsed.data.smtp_port
+  if (parsed.data.smtp_secure !== undefined) update.smtpSecure = parsed.data.smtp_secure
+  if (parsed.data.smtp_user !== undefined) update.smtpUser = parsed.data.smtp_user
+  if (parsed.data.luma_calendar_id !== undefined)
+    update.lumaCalendarId = parsed.data.luma_calendar_id
+  if (parsed.data.luma_event_id !== undefined) update.lumaEventId = parsed.data.luma_event_id
+
+  // Secrets: skip updates when the form echoed back the masked value.
+  if (parsed.data.resend_api_key !== undefined && !isUnchanged(parsed.data.resend_api_key)) {
+    update.resendApiKey = parsed.data.resend_api_key || null
+  }
+  if (parsed.data.smtp_password !== undefined && !isUnchanged(parsed.data.smtp_password)) {
+    update.smtpPassword = parsed.data.smtp_password || null
+  }
+  if (parsed.data.luma_api_key !== undefined && !isUnchanged(parsed.data.luma_api_key)) {
+    update.lumaApiKey = parsed.data.luma_api_key || null
+  }
+
+  if (!existing) {
+    const [row] = await db.insert(appSettings).values(update).returning()
+    return NextResponse.json(rowToDto(row))
+  }
+  const [row] = await db
+    .update(appSettings)
+    .set(update)
+    .where(eq(appSettings.id, existing.id))
+    .returning()
+  return NextResponse.json(rowToDto(row))
+}

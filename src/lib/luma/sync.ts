@@ -1,238 +1,197 @@
-import { createAdminClient } from '@/lib/supabase/server'
-import { createLumaService } from './service'
-import { LumaEvent, LumaGuest } from '@/types/luma'
-import { AppSettings } from '@/types/database'
+import 'server-only'
+import { eq, sql } from 'drizzle-orm'
+import { db } from '@/lib/db/client'
+import { lumaEvents, lumaGuests, attendees, couponCodes, appSettings } from '@/lib/db/schema'
+import { listAllEvents, listAllGuests, type LumaGuest } from './client'
+import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
 
-interface SyncResult {
-  success: boolean
-  guestsSynced: number
-  guestsAdded: number
-  guestsUpdated: number
-  errors: string[]
-}
+/**
+ * Refresh the local cache of Luma events from the API. Idempotent. Does NOT
+ * pull guests — that's a separate step so the button in the UI is fast.
+ */
+export async function refreshLumaEvents(apiKey: string, calendarApiId?: string) {
+  const events = await listAllEvents(apiKey, calendarApiId)
+  const now = new Date().toISOString()
+  let upserted = 0
+  for (const ev of events) {
+    const existing = await db
+      .select({ id: lumaEvents.id })
+      .from(lumaEvents)
+      .where(eq(lumaEvents.apiId, ev.api_id))
+      .limit(1)
 
-interface SyncOptions {
-  status?: 'confirmed' | 'waitlist' | 'declined' | 'cancelled'
+    const row = {
+      apiId: ev.api_id,
+      name: ev.name,
+      startAt: ev.start_at ?? null,
+      endAt: ev.end_at ?? null,
+      timezone: ev.timezone ?? null,
+      url: ev.url ?? null,
+      coverUrl: ev.cover_url ?? null,
+      guestCount: ev.guest_count ?? 0,
+      locationName: ev.location?.place?.name ?? null,
+      locationAddress:
+        ev.location?.place?.address ?? ev.geo_address_info?.full_address ?? null,
+      updatedAt: now,
+    }
+
+    if (existing[0]) {
+      await db.update(lumaEvents).set(row).where(eq(lumaEvents.id, existing[0].id))
+    } else {
+      await db.insert(lumaEvents).values({ ...row, isSyncEnabled: false })
+    }
+    upserted++
+  }
+  return { upserted }
 }
 
 /**
- * Get app settings including API keys from database
+ * Pull all guests for an event from Luma, upsert into `luma_guests` by api_id,
+ * and mirror confirmed+approved guests into the `attendees` table so they
+ * show up in the main dashboard.
+ *
+ * Does NOT assign coupons or send emails — that's `dispatchLumaCoupons`.
  */
-export async function getAppSettings(): Promise<AppSettings | null> {
-  const supabase = await createAdminClient()
-  const { data: settings } = await supabase
-    .from('app_settings')
-    .select('*')
+export async function syncLumaGuests(apiKey: string, eventApiId: string) {
+  const fetched = await listAllGuests(apiKey, eventApiId)
+  const now = new Date().toISOString()
+
+  let upserted = 0
+  let mirrored = 0
+
+  for (const g of fetched) {
+    await upsertGuest(g, eventApiId, now)
+    upserted++
+
+    // Mirror confirmed guests into attendees so the main dashboard stats
+    // include them. Skip waitlist/declined/cancelled.
+    if (g.registration_status === 'confirmed') {
+      const email = g.email.toLowerCase()
+      const existing = await db
+        .select({ id: attendees.id })
+        .from(attendees)
+        .where(eq(attendees.email, email))
+        .limit(1)
+      if (!existing[0]) {
+        await db.insert(attendees).values({
+          name: g.name,
+          email,
+          source: 'luma',
+          lumaGuestId: g.api_id,
+          lumaEventId: eventApiId,
+          registeredAt: g.created_at ?? now,
+        })
+        mirrored++
+      }
+    }
+  }
+
+  await db
+    .update(lumaEvents)
+    .set({ lastSyncedAt: now, isSyncEnabled: true, updatedAt: now })
+    .where(eq(lumaEvents.apiId, eventApiId))
+
+  return { upserted, mirrored }
+}
+
+async function upsertGuest(g: LumaGuest, eventApiId: string, now: string) {
+  const existing = await db
+    .select({ id: lumaGuests.id })
+    .from(lumaGuests)
+    .where(eq(lumaGuests.apiId, g.api_id))
     .limit(1)
-    .single()
-  
-  return settings ?? null
+
+  const row = {
+    apiId: g.api_id,
+    eventApiId,
+    name: g.name,
+    email: g.email.toLowerCase(),
+    registrationStatus: g.registration_status,
+    approvalStatus: g.approval_status ?? null,
+    attendanceStatus: g.attendance_status ?? null,
+    registeredAt: g.created_at ?? null,
+    syncedAt: now,
+    updatedAt: now,
+  }
+
+  if (existing[0]) {
+    await db.update(lumaGuests).set(row).where(eq(lumaGuests.id, existing[0].id))
+  } else {
+    await db.insert(lumaGuests).values(row)
+  }
 }
 
 /**
- * Get the configured Luma event ID from app_settings
+ * For every confirmed guest without a coupon yet, assign one atomically and
+ * (if Resend is configured) send the credit email. Returns counts for the UI.
  */
-export async function getConfiguredEventId(): Promise<string | null> {
-  const settings = await getAppSettings()
-  return settings?.luma_event_id ?? null
-}
+export async function dispatchLumaCoupons(eventApiId: string) {
+  const [settings] = await db.select().from(appSettings).limit(1)
+  const now = new Date().toISOString()
 
-/**
- * Sync guests from the configured Luma event
- * This ONLY syncs guest data - coupon assignment and emails are handled separately
- * If eventId is not provided, fetches from app_settings
- */
-export async function syncLumaGuests(
-  eventId?: string,
-  options: SyncOptions = {}
-): Promise<SyncResult> {
-  const { status = 'confirmed' } = options
-  
-  const supabase = await createAdminClient()
-  
-  const result: SyncResult = {
-    success: true,
-    guestsSynced: 0,
-    guestsAdded: 0,
-    guestsUpdated: 0,
-    errors: [],
-  }
-
-  // Get settings including API keys
-  const settings = await getAppSettings()
-  
-  if (!settings?.luma_api_key) {
-    return {
-      ...result,
-      success: false,
-      errors: ['Luma API key not configured. Please set it in Settings.'],
-    }
-  }
-
-  // Get event ID from settings if not provided
-  const targetEventId = eventId || settings.luma_event_id
-  
-  if (!targetEventId) {
-    return {
-      ...result,
-      success: false,
-      errors: ['No Luma event configured. Please set a Luma event ID in settings.'],
-    }
-  }
-
-  // Create Luma service with database-stored API key
-  const luma = createLumaService(settings.luma_api_key)
-
-  // Create sync log entry
-  const { data: syncLog } = await supabase
-    .from('luma_sync_logs')
-    .insert({
-      luma_event_id: targetEventId,
-      sync_type: 'manual' as const,
-      status: 'started' as const,
-    })
+  const pending = await db
     .select()
-    .single()
+    .from(lumaGuests)
+    .where(
+      sql`${lumaGuests.eventApiId} = ${eventApiId}
+          AND ${lumaGuests.registrationStatus} = 'confirmed'
+          AND ${lumaGuests.couponCodeId} IS NULL`,
+    )
 
-  try {
-    // Ensure event exists locally
-    const event = await luma.getEvent(targetEventId)
-    await upsertLumaEvent(supabase, event)
+  let assigned = 0
+  let emailed = 0
 
-    // Fetch guests from Luma
-    const guests = await luma.getAllEventGuests(targetEventId, status)
-    result.guestsSynced = guests.length
+  for (const guest of pending) {
+    const [coupon] = await db
+      .update(couponCodes)
+      .set({
+        isUsed: true,
+        usedAt: now,
+        usedByType: 'luma_guest',
+        updatedAt: now,
+      })
+      .where(
+        sql`${couponCodes.id} = (
+          SELECT id FROM ${couponCodes}
+          WHERE ${couponCodes.isUsed} = 0 AND ${couponCodes.usedAt} IS NULL
+          LIMIT 1
+        )`,
+      )
+      .returning()
 
-    // Process guests in batches to avoid overwhelming the database
-    const batchSize = 50
-    for (let i = 0; i < guests.length; i += batchSize) {
-      const batch = guests.slice(i, i + batchSize)
-      
-      for (const guest of batch) {
-        try {
-          const isNew = await upsertLumaGuest(supabase, targetEventId, guest)
-          
-          if (isNew) {
-            result.guestsAdded++
-          } else {
-            result.guestsUpdated++
-          }
-        } catch (error) {
-          result.errors.push(
-            `Failed to process guest ${guest.email}: ${error instanceof Error ? error.message : 'Unknown error'}`
-          )
-        }
-      }
+    if (!coupon) break // out of codes
 
-      // Small delay between batches
-      if (i + batchSize < guests.length) {
-        await new Promise(resolve => setTimeout(resolve, 100))
+    await db
+      .update(lumaGuests)
+      .set({ couponCodeId: coupon.id, updatedAt: now })
+      .where(eq(lumaGuests.id, guest.id))
+
+    // Keep the mirrored attendee in sync too.
+    await db
+      .update(attendees)
+      .set({ couponCodeId: coupon.id, updatedAt: now })
+      .where(eq(attendees.email, guest.email))
+
+    assigned++
+
+    if (canSendEmail(settings)) {
+      try {
+        await sendCouponEmail({
+          settings,
+          attendee: { name: guest.name, email: guest.email },
+          couponCode: coupon,
+          fromName: `Cafe Cursor ${settings.cityName}`,
+        })
+        await db
+          .update(lumaGuests)
+          .set({ emailSentAt: now, updatedAt: now })
+          .where(eq(lumaGuests.id, guest.id))
+        emailed++
+      } catch (e) {
+        console.error('resend failed for guest', guest.email, e)
       }
     }
-
-    // Update event's last_synced_at
-    await supabase
-      .from('luma_events')
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq('luma_event_id', targetEventId)
-
-    result.success = result.errors.length === 0
-
-  } catch (error) {
-    result.success = false
-    result.errors.push(error instanceof Error ? error.message : 'Sync failed')
   }
 
-  // Update sync log
-  if (syncLog) {
-    await supabase
-      .from('luma_sync_logs')
-      .update({
-        status: result.success ? 'completed' : 'failed',
-        guests_synced: result.guestsSynced,
-        guests_added: result.guestsAdded,
-        guests_updated: result.guestsUpdated,
-        coupons_assigned: 0, // No longer assigning during sync
-        error_message: result.errors.length > 0 ? result.errors.join('; ') : null,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', syncLog.id)
-  }
-
-  return result
-}
-
-/**
- * Upsert a Luma event to the database
- */
-async function upsertLumaEvent(
-  supabase: Awaited<ReturnType<typeof createAdminClient>>,
-  event: LumaEvent
-): Promise<void> {
-  const { error } = await supabase
-    .from('luma_events')
-    .upsert({
-      luma_event_id: event.api_id,
-      name: event.name,
-      description: event.description || null,
-      start_at: event.start_at,
-      end_at: event.end_at,
-      timezone: event.timezone,
-      url: event.url || null,
-      cover_url: event.cover_url || null,
-      guest_count: event.guest_count,
-      location_type: event.location?.type || null,
-      location_name: event.location?.name || null,
-      location_address: event.location?.address || null,
-      visibility: event.visibility,
-    }, {
-      onConflict: 'luma_event_id',
-    })
-
-  if (error) {
-    throw new Error(`Failed to upsert event: ${error.message}`)
-  }
-}
-
-/**
- * Upsert a Luma guest to the database
- * Returns true if guest was newly created
- * Does NOT assign coupons or send emails - that's done separately via the admin UI
- */
-async function upsertLumaGuest(
-  supabase: Awaited<ReturnType<typeof createAdminClient>>,
-  eventId: string,
-  guest: LumaGuest
-): Promise<boolean> {
-  // Check if guest exists
-  const { data: existing } = await supabase
-    .from('luma_guests')
-    .select('id')
-    .eq('luma_guest_id', guest.id)
-    .single()
-
-  const isNew = !existing
-
-  const { error } = await supabase
-    .from('luma_guests')
-    .upsert({
-      luma_guest_id: guest.id,
-      luma_event_id: eventId,
-      guest_key: guest.guest_key,
-      name: guest.name,
-      email: guest.email.toLowerCase(),
-      registration_status: guest.registration_status,
-      approval_status: guest.approval_status || null,
-      attendance_status: guest.attendance_status || null,
-      registered_at: guest.created_at,
-      synced_at: new Date().toISOString(),
-    }, {
-      onConflict: 'luma_guest_id',
-    })
-
-  if (error) {
-    throw new Error(`Failed to upsert guest: ${error.message}`)
-  }
-
-  return isNew
+  return { assigned, emailed, pending: pending.length }
 }

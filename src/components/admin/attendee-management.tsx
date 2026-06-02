@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { AttendeeWithCoupon } from '@/types/database'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import type { AttendeeWithCoupon } from '@/lib/db/schema'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,15 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
-import { Search, MoreHorizontal, Mail, Ticket, Trash2, Download, Users } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+import { Search, Send, Ticket, Trash2, Download } from 'lucide-react'
+import { format } from 'date-fns'
 
 type FilterStatus = 'all' | 'with_coupon' | 'without_coupon'
 
@@ -39,276 +32,187 @@ export function AttendeeManagement() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all')
   const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState({
-    total: 0,
-    withCoupons: 0,
-    withoutCoupons: 0,
-  })
-
-  const supabase = createClient()
 
   const fetchAttendees = useCallback(async () => {
     setLoading(true)
-    
-    let query = supabase
-      .from('attendees')
-      .select(`*, coupon_codes (*)`)
-      .order('registered_at', { ascending: false })
-
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`)
-    }
-
-    if (statusFilter === 'with_coupon') {
-      query = query.not('coupon_code_id', 'is', null)
-    } else if (statusFilter === 'without_coupon') {
-      query = query.is('coupon_code_id', null)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
+    const params = new URLSearchParams()
+    if (search) params.set('search', search)
+    if (statusFilter !== 'all') params.set('status', statusFilter)
+    try {
+      const res = await fetch(`/api/admin/attendees?${params.toString()}`)
+      const json = await res.json()
+      setAttendees(json.attendees ?? [])
+    } catch {
       toast.error('Failed to load attendees')
-      console.error(error)
-    } else {
-      setAttendees(data || [])
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
-  }, [supabase, search, statusFilter])
-
-  const fetchStats = useCallback(async () => {
-    const [
-      { count: total },
-      { count: withCoupons },
-      { count: withoutCoupons },
-    ] = await Promise.all([
-      supabase.from('attendees').select('*', { count: 'exact', head: true }),
-      supabase.from('attendees').select('*', { count: 'exact', head: true }).not('coupon_code_id', 'is', null),
-      supabase.from('attendees').select('*', { count: 'exact', head: true }).is('coupon_code_id', null),
-    ])
-
-    setStats({
-      total: total || 0,
-      withCoupons: withCoupons || 0,
-      withoutCoupons: withoutCoupons || 0,
-    })
-  }, [supabase])
+  }, [search, statusFilter])
 
   useEffect(() => {
     fetchAttendees()
-    fetchStats()
-  }, [fetchAttendees, fetchStats])
+  }, [fetchAttendees])
 
-  const handleSendEmail = async (attendeeId: number) => {
-    const attendee = attendees.find((a) => a.id === attendeeId)
-    if (!attendee?.coupon_codes) {
-      toast.error('This attendee does not have a coupon code assigned')
-      return
+  const stats = useMemo(() => {
+    const withCoupons = attendees.filter((a) => a.couponCode).length
+    return {
+      total: attendees.length,
+      withCoupons,
+      withoutCoupons: attendees.length - withCoupons,
     }
+  }, [attendees])
 
+  const sendEmail = async (id: number) => {
     try {
-      const response = await fetch('/api/admin/send-email', {
+      const res = await fetch('/api/admin/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendeeId }),
+        body: JSON.stringify({ attendeeId: id }),
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to send email')
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Failed')
       }
-
-      toast.success('Email sent successfully!')
-    } catch {
-      toast.error('Failed to send email')
+      toast.success('Email sent')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to send email')
     }
   }
 
-  const handleAssignCoupon = async (attendeeId: number) => {
+  const assignCoupon = async (id: number) => {
     try {
-      const response = await fetch('/api/admin/assign-coupon', {
+      const res = await fetch('/api/admin/assign-coupon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendeeId }),
+        body: JSON.stringify({ attendeeId: id }),
       })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to assign coupon')
-      }
-
-      toast.success('Coupon assigned and email sent!')
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Failed')
+      toast.success('Code assigned')
       fetchAttendees()
-      fetchStats()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to assign coupon')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to assign')
     }
   }
 
-  const handleDeleteAttendee = async (attendeeId: number) => {
-    if (!confirm('Are you sure you want to delete this attendee?')) return
-
-    const { error } = await supabase
-      .from('attendees')
-      .delete()
-      .eq('id', attendeeId)
-
-    if (error) {
-      toast.error('Failed to delete attendee')
-    } else {
-      toast.success('Attendee deleted')
+  const remove = async (id: number) => {
+    if (!confirm('Delete this attendee?')) return
+    const res = await fetch(`/api/admin/attendees/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      toast.success('Deleted')
       fetchAttendees()
-      fetchStats()
-    }
+    } else toast.error('Failed to delete')
   }
 
-  const handleExportCsv = () => {
-    const headers = ['Name', 'Email', 'Registered At', 'Coupon Code']
+  const exportCsv = () => {
+    const headers = ['Name', 'Email', 'Registered At', 'Code', 'Source']
     const rows = attendees.map((a) => [
       a.name,
       a.email,
-      new Date(a.registered_at).toISOString(),
-      a.coupon_codes?.code || '',
+      a.registeredAt,
+      a.couponCode?.code ?? '',
+      a.source,
     ])
-
-    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `attendees-${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `attendees-${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
     URL.revokeObjectURL(url)
   }
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardDescription className="text-lg font-light">Total Attendees</CardDescription>
-            <CardTitle className="text-2xl">{stats.total}</CardTitle>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardDescription className="text-lg font-light">With Coupons</CardDescription>
-            <CardTitle className="text-2xl">{stats.withCoupons}</CardTitle>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardDescription className="text-lg font-light">Without Coupons</CardDescription>
-            <CardTitle className="text-2xl">{stats.withoutCoupons}</CardTitle>
-          </CardHeader>
-        </Card>
+        <StatCard label="Total" value={stats.total} />
+        <StatCard label="With code" value={stats.withCoupons} tone="green" />
+        <StatCard label="Without code" value={stats.withoutCoupons} tone="orange" />
       </div>
 
-      {/* Table with Filters */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col md:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by name or email..."
+                placeholder="Search name or email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
               />
             </div>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as FilterStatus)}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filter by status" />
+              <SelectTrigger className="w-full md:w-56">
+                <SelectValue placeholder="Filter" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Attendees</SelectItem>
-                <SelectItem value="with_coupon">With Coupon</SelectItem>
-                <SelectItem value="without_coupon">Without Coupon</SelectItem>
+                <SelectItem value="all">All attendees</SelectItem>
+                <SelectItem value="with_coupon">With code</SelectItem>
+                <SelectItem value="without_coupon">Without code</SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              variant="outline"
-              onClick={handleExportCsv}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Export CSV
+            <Button variant="outline" onClick={exportCsv}>
+              <Download className="size-4" /> Export CSV
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <div className="py-10 text-center text-muted-foreground">Loading…</div>
           ) : attendees.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No attendees found</div>
+            <div className="py-10 text-center text-muted-foreground">No attendees</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Coupon</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Code</TableHead>
                   <TableHead>Registered</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {attendees.map((attendee) => (
-                  <TableRow key={attendee.id}>
-                    <TableCell className="font-medium">{attendee.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{attendee.email}</TableCell>
+                {attendees.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="font-medium">{a.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{a.email}</TableCell>
                     <TableCell>
-                      {attendee.coupon_codes ? (
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
-                          {attendee.coupon_codes.code}
-                        </Badge>
+                      <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                        {a.source}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {a.couponCode ? (
+                        <span className="font-code text-xs">
+                          {a.couponCode.code.slice(0, 24)}
+                          {a.couponCode.code.length > 24 ? '…' : ''}
+                        </span>
                       ) : (
-                        <Badge variant="secondary">
-                          None
-                        </Badge>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDistanceToNow(new Date(attendee.registered_at), { addSuffix: true })}
+                    <TableCell className="text-muted-foreground text-sm">
+                      {a.registeredAt ? format(new Date(a.registeredAt), 'MMM d, HH:mm') : ''}
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {attendee.coupon_codes ? (
-                            <DropdownMenuItem
-                              onClick={() => handleSendEmail(attendee.id)}
-                              className="cursor-pointer"
-                            >
-                              <Mail className="mr-2 h-4 w-4" />
-                              Resend Email
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              onClick={() => handleAssignCoupon(attendee.id)}
-                              className="cursor-pointer"
-                            >
-                              <Ticket className="mr-2 h-4 w-4" />
-                              Assign Coupon
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteAttendee(attendee.id)}
-                            className="text-destructive focus:text-destructive cursor-pointer"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {!a.couponCode ? (
+                        <Button variant="ghost" size="icon-sm" onClick={() => assignCoupon(a.id)} title="Assign code">
+                          <Ticket className="size-4" />
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="icon-sm" onClick={() => sendEmail(a.id)} title="Resend email">
+                          <Send className="size-4" />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon-sm" onClick={() => remove(a.id)} title="Delete">
+                        <Trash2 className="size-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -321,3 +225,35 @@ export function AttendeeManagement() {
   )
 }
 
+function StatCard({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string
+  value: number
+  tone?: 'default' | 'green' | 'orange'
+}) {
+  return (
+    <Card className="relative overflow-hidden">
+      <div className="absolute inset-0 bg-dotted opacity-60 pointer-events-none" aria-hidden />
+      <CardContent className="relative flex flex-col gap-2 py-1">
+        <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </span>
+        <span
+          className={
+            'font-display text-3xl tracking-tight ' +
+            (tone === 'green'
+              ? 'text-[color:var(--brand-green)]'
+              : tone === 'orange'
+                ? 'text-[color:var(--brand-orange)]'
+                : '')
+          }
+        >
+          {value}
+        </span>
+      </CardContent>
+    </Card>
+  )
+}

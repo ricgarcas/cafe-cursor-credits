@@ -1,91 +1,76 @@
-import { Attendee, CouponCode } from '@/types/database'
+import type { Attendee, CouponCode } from '@/lib/db/schema'
 
 interface CouponEmailProps {
-  attendee: Attendee
-  couponCode: CouponCode
+  attendee: Pick<Attendee, 'name' | 'email'>
+  couponCode: Pick<CouponCode, 'code'>
+  cityName?: string
 }
 
-export function renderCouponEmail({ attendee, couponCode }: CouponEmailProps): string {
-  const firstName = attendee.name.split(' ')[0]
-  const redemptionUrl = `https://cursor.com/referral?code=${couponCode.code}`
+function redemptionUrl(code: string): string {
+  if (/^https?:\/\//i.test(code)) return code
+  return `https://cursor.com/referral?code=${encodeURIComponent(code)}`
+}
 
-  return `
-<!DOCTYPE html>
+/**
+ * HTML email template for the "here's your Cursor credit code" message.
+ * Uses a dark, code-editor-style palette matching the app aesthetic.
+ */
+export function renderCouponEmail({ attendee, couponCode, cityName }: CouponEmailProps): string {
+  const firstName = attendee.name.split(' ')[0]
+  const redeem = redemptionUrl(couponCode.code)
+  const venue = cityName ? `Cafe Cursor ${cityName}` : 'Cafe Cursor'
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Cursor Coupon Code</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your Cursor credit code</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #000000;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #000000; background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px); background-size: 20px 20px;">
-        <tr>
-            <td style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 600px; margin: 0 auto;">
-                    <tr>
-                        <td align="center" style="padding-bottom: 32px;">
-                            <div style="width: 64px; height: 64px; background-color: #27272a; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                                <svg width="40" height="40" viewBox="0 0 24 24" fill="white">
-                                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                                </svg>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: rgba(0, 0, 0, 0.8); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);">
-                                <tr>
-                                    <td style="padding: 40px 32px;">
-                                        <h2 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 400; color: #ffffff;">
-                                            Hello ${firstName},
-                                        </h2>
-                                        <p style="margin: 0 0 24px 0; font-size: 16px; color: #d4d4d8; line-height: 1.5;">
-                                            Thank you for registering for Cafe Cursor Toronto.
-                                        </p>
-
-                                        <h3 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 600; color: #ffffff;">
-                                            Your Cursor Coupon Code
-                                        </h3>
-                                        <p style="margin: 0 0 16px 0; font-size: 14px; color: #d4d4d8; line-height: 1.5;">
-                                            You've received an exclusive coupon code:
-                                        </p>
-
-                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 20px;">
-                                            <tr>
-                                                <td style="background-color: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 24px; text-align: center;">
-                                                    <div style="font-size: 24px; font-weight: 700; color: #ffffff; letter-spacing: 0.05em; margin-bottom: 16px; font-family: 'Courier New', monospace;">
-                                                        ${couponCode.code}
-                                                    </div>
-                                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                                                        <tr>
-                                                            <td align="center">
-                                                                <a href="${redemptionUrl}" style="display: inline-block; padding: 12px 32px; background-color: #52525b; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 600; border: 1px solid rgba(255, 255, 255, 0.15);">
-                                                                    Redeem Your Credits
-                                                                </a>
-                                                            </td>
-                                                        </tr>
-                                                    </table>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td align="center" style="padding-top: 32px;">
-                            <p style="margin: 0; font-size: 14px; color: #71717a;">
-                                Cafe Cursor Toronto
-                            </p>
-                        </td>
-                    </tr>
-                </table>
+<body style="margin:0;padding:0;background:#0F0F10;font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Roboto,Arial,sans-serif;color:#F5F5F5;">
+  <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background:#0F0F10;">
+    <tr>
+      <td style="padding:40px 20px;" align="center">
+        <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="max-width:560px;">
+          <tr>
+            <td style="padding-bottom:28px;" align="center">
+              <div style="display:inline-flex;align-items:center;gap:10px;color:#F5F5F5;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;">
+                <span style="display:inline-block;width:22px;height:22px;background:#1a1a1d;border:1px solid #2a2a30;border-radius:4px;"></span>
+                Cafe Cursor
+              </div>
             </td>
-        </tr>
-    </table>
-</body>
-</html>
-  `.trim()
-}
+          </tr>
+          <tr>
+            <td style="background:#18181A;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:36px 32px;">
+              <h1 style="margin:0 0 6px 0;font-size:28px;font-weight:500;letter-spacing:-0.02em;color:#F5F5F5;">Hi ${firstName},</h1>
+              <p style="margin:0 0 24px 0;font-size:16px;line-height:1.55;color:#B4B4B8;">
+                Thanks for registering for ${venue}. Here are your free Cursor credits.
+              </p>
 
+              <div style="background:#0F0F10;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:20px;text-align:center;">
+                <div style="font-family:'JetBrains Mono','Menlo','Courier New',monospace;font-size:18px;color:#F5F5F5;word-break:break-all;margin-bottom:16px;">
+                  ${couponCode.code}
+                </div>
+                <a href="${redeem}" style="display:inline-block;padding:12px 28px;background:#F5F5F5;color:#0F0F10;text-decoration:none;border-radius:999px;font-size:15px;font-weight:500;">
+                  Redeem credits
+                </a>
+              </div>
+
+              <p style="margin:22px 0 0 0;font-size:13px;color:#6F6F76;line-height:1.5;">
+                This code is one-time use. If it doesn't work, reply to this email and we'll sort it out.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding-top:24px;color:#6F6F76;font-size:12px;line-height:1.5;">
+              ${venue}<br/>
+              Built for the <a href="https://cursor.com/ambassadors" style="color:#B4B4B8;text-decoration:underline;">Cursor Ambassador Community</a>.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}

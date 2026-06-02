@@ -1,134 +1,87 @@
-# Cafe Cursor - Project Rules
+# CLAUDE.md
 
-## Project Overview
+> Claude Code entry point for this repo. The canonical agent brief is
+> **[AGENTS.md](./AGENTS.md)** — read that first. This file adds a few
+> Claude-specific tips.
 
-Event registration system for managing attendee registrations and distributing coupon codes via email. Single-city-per-deployment architecture.
+## TL;DR for Claude Code
 
-## Tech Stack
+**Cafe Cursor** — Next.js 16 + SQLite (Drizzle + better-sqlite3) +
+iron-session auth. Event registration + Cursor credit distribution for
+community meetups. One deployment per city, built for the
+[Cursor Ambassador Community](https://cursor.com/ambassadors).
 
-- Next.js 15 (App Router) with TypeScript
-- Supabase (PostgreSQL) for database and authentication
-- shadcn/ui components with Tailwind CSS v4
-- Resend for email delivery
-- Zod for schema validation
+**Don't re-add Supabase.** It was deliberately removed; the DB is now SQLite.
+See `AGENTS.md` for the full list of don'ts.
 
-## Quick Commands
+## Fast orientation
 
-- `npm run dev` - Start development server
-- `npm run build` - Production build
-- `npm run lint` - Run ESLint
-- `npx shadcn@latest add [component]` - Add shadcn/ui component
+```bash
+# See the shape of the codebase:
+find src -type d -maxdepth 3
 
-## Code Patterns
-
-### Supabase Clients
-
-```typescript
-// User operations (respects RLS)
-import { createClient } from '@/lib/supabase/server'
-const supabase = await createClient()
-
-// Admin operations (bypasses RLS)
-import { createAdminClient } from '@/lib/supabase/server'
-const supabase = await createAdminClient()
-
-// Browser/Client Components
-import { createClient } from '@/lib/supabase/client'
-const supabase = createClient()
+# Most important files when starting a new task:
+cat AGENTS.md                    # conventions + don'ts
+cat src/lib/db/schema.ts         # all data shapes live here
+cat src/middleware.ts            # auth gate for /admin and /onboarding
+cat src/lib/auth/guard.ts        # requireUser() used by every admin route
 ```
 
-### Form Validation
+## Running things
 
-```typescript
-import { z } from 'zod'
-
-const schema = z.object({
-  name: z.string().min(1).max(255),
-  email: z.string().email().max(255),
-})
-
-const result = schema.safeParse(body)
-if (!result.success) {
-  return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
-}
+```bash
+npm run init         # first-time setup: generates .env.local + creates DB
+npm run dev          # start the dev server
+npm run build        # verify changes compile
+npm run db:push      # after editing src/lib/db/schema.ts
+npm run db:studio    # visual DB browser at localhost:4983
 ```
 
-### API Route Pattern
+When you modify the schema, **always** run `npm run db:push` before
+`npm run build` — otherwise queries against the new columns will fail at
+collect-page-data.
 
-```typescript
-import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
-import { z } from 'zod'
+## Common tasks — where to look
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const supabase = await createAdminClient()
-    // Validate, process, return response
-  } catch (error) {
-    console.error('Error:', error)
-    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
-  }
-}
-```
+| You want to… | Start here |
+|---|---|
+| Add an admin page | `src/app/admin/*/page.tsx`, add to `src/components/admin/sidebar.tsx` |
+| Add an API route | `src/app/api/admin/*/route.ts`, wrap with `requireUser()` |
+| Change the DB | `src/lib/db/schema.ts` → `npm run db:push` |
+| Add a new API-key setting | See the masking pattern in `src/app/api/admin/settings/route.ts` + `SecretField` in `src/app/admin/settings/page.tsx` |
+| Change the design tokens | `src/app/globals.css` (`:root` and `.dark` blocks) |
+| Add a public page | Use `<PublicShell>` from `src/components/public/shell.tsx` |
+| Send email | `src/lib/emails/send-coupon-email.ts` — copy the shape |
+| Touch Luma | `src/lib/luma/client.ts` + `src/lib/luma/sync.ts` |
 
-### Sending Emails
+## Aesthetic cheat sheet
 
-```typescript
-import { createAdminClient } from '@/lib/supabase/server'
-import { createResendClient } from '@/lib/resend'
-import { sendCouponEmail } from '@/lib/emails/send-coupon-email'
+Cursor-inspired. **Dark-by-default but dual-themed**, warm cream in light
+mode. Flat surfaces, no shadows, subtle 1px borders, **pill buttons**.
 
-const supabase = await createAdminClient()
-const { data: settings } = await supabase
-  .from('app_settings')
-  .select('resend_api_key, city_name')
-  .limit(1)
-  .single()
+Type classes: `font-display` (tight Inter), `font-tagline` (Fraunces
+italic), `font-code` (JetBrains Mono). Accent tokens:
+`var(--brand-orange)`, `var(--brand-green)` with `-soft` variants for
+backgrounds.
 
-if (settings?.resend_api_key) {
-  const resendClient = createResendClient(settings.resend_api_key)
-  await sendCouponEmail({ resendClient, attendee, couponCode, fromName: `Cafe Cursor ${settings.city_name}` })
-}
-```
+## Before finishing a task
 
-## File Organization
+1. `npm run build` — must pass.
+2. `npm run lint` — must be clean.
+3. Diff review: are there any `@supabase`, `createAdminClient`,
+   `@/types/database`, or mock references? If so, you drifted. Revert.
+4. No new multi-paragraph doc comments. Terse, one-liner comments only where
+   the *why* is non-obvious.
+5. If you added a new env var, add it to `env.example` AND
+   `scripts/setup.mjs`.
+6. If you added a user-visible feature, add the nav entry in `sidebar.tsx`
+   and mention it in `README.md`'s Routes table.
 
-- `src/app/` - Pages and API routes
-- `src/components/ui/` - shadcn/ui components (don't modify)
-- `src/components/admin/` - Admin components
-- `src/lib/emails/` - Email templates
-- `src/types/` - TypeScript types
+## Style expectations from the repo
 
-## Database Tables
-
-- `attendees` - Website/manual registrations with coupon assignments
-- `coupon_codes` - Coupon inventory
-- `app_settings` - City configuration (singleton)
-
-## Authentication
-
-- Public: `/`, `/register`, `/login`, `/admin-register`
-- Protected: `/admin/*` (requires Supabase auth)
-- Admin registration uses `ADMIN_REGISTRATION_SECRET` env var
-
-## Environment Variables
-
-Required:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `ADMIN_REGISTRATION_SECRET`
-- `NEXT_PUBLIC_APP_URL`
-
-Resend API key is stored in `app_settings` table and configured via admin Settings page.
-
-## Best Practices
-
-1. Use `createAdminClient()` for data modifications or bypassing RLS
-2. Validate all API inputs with Zod
-3. Handle errors gracefully with console logging
-4. Use Server Components for data fetching
-5. Keep sensitive operations server-side
-6. Use toast notifications (sonner) for admin feedback
-7. Follow existing patterns in `src/components/admin/`
+Following the global CLAUDE.md preferences that shaped this repo:
+- **Be terse.** One-sentence answers when possible.
+- **Commit to a take.** "It depends" is a cop-out here. If two approaches
+  are viable, pick one and say why.
+- **Strong opinions, cheaply held.** Flag dumb requests; don't sugarcoat.
+- **No trailing summaries** — the diff speaks for itself.

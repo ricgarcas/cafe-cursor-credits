@@ -3,11 +3,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   Cafe Cursor — Design System
+   Inspired by cursor.com. Dual theme:
+   - Light: neutral light-gray canvas with white cards, black ink.
+   - Dark:  rich near-black, slight warmth, off-white ink.
+   Accents: cursor-orange (action), cursor-green (success/progress).
+   ============================================================ */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-manrope);
-  --font-mono: var(--font-roboto-mono);
+  --color-surface: var(--surface);
+  --color-canvas: var(--canvas);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -37,94 +48,186 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-orange-soft: var(--brand-orange-soft);
+  --color-brand-green: var(--brand-green);
+  --color-brand-green-soft: var(--brand-green-soft);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
 }
 
+/* Light theme — neutral light-gray canvas, white surfaces, black ink */
 :root {
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --radius: 14px;
+
+  --canvas:     oklch(0.955 0 0);         /* ~#F3F3F3 neutral light gray */
+  --background: oklch(0.955 0 0);
+  --foreground: oklch(0.18 0 0);          /* near-black */
+
+  --surface:    oklch(1 0 0);             /* cards: white */
+  --card:       oklch(1 0 0);
+  --card-foreground: oklch(0.18 0 0);
+
+  --popover:    oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0 0);
+
+  --primary:    oklch(0.18 0 0);          /* black buttons */
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+
+  --secondary:  oklch(0.94 0 0);
+  --secondary-foreground: oklch(0.18 0 0);
+
+  --muted:      oklch(0.93 0 0);
+  --muted-foreground: oklch(0.48 0 0);
+
+  --accent:     oklch(0.94 0 0);
+  --accent-foreground: oklch(0.18 0 0);
+
+  --destructive: oklch(0.58 0.22 27);
+  --border:     oklch(0.18 0 0 / 0.08);
+  --input:      oklch(0.18 0 0 / 0.10);
+  --ring:       oklch(0.18 0 0 / 0.35);
+
+  /* Monochrome — "brand" slots are aliased to foreground so legacy utilities
+     still resolve to a valid color. No chromatic accents app-wide. */
+  --brand-orange:      var(--foreground);
+  --brand-orange-soft: oklch(0.18 0 0 / 0.08);
+  --brand-green:       var(--foreground);
+  --brand-green-soft:  oklch(0.18 0 0 / 0.08);
+
+  --chart-1: oklch(0.18 0 0);
+  --chart-2: oklch(0.38 0 0);
+  --chart-3: oklch(0.55 0 0);
+  --chart-4: oklch(0.72 0 0);
+  --chart-5: oklch(0.88 0 0);
+
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.18 0.005 60);
+  --sidebar-primary: oklch(0.18 0.005 60);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent: oklch(0.94 0 0);
+
+  /* Interactive dot-grid backdrop (react-bits DotGrid). Light theme: soft
+     mid-grey dots on gray canvas. Hex only — the component parses #rrggbb. */
+  --dot-base: #e2e2e2;
+  --dot-active: #b8b8b8;
+  --sidebar-accent-foreground: oklch(0.18 0.005 60);
+  --sidebar-border: oklch(0.18 0.005 60 / 0.08);
+  --sidebar-ring: oklch(0.18 0.005 60 / 0.35);
 }
 
+/* Dark theme — rich near-black with slight warmth */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.81 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
+  --canvas:     oklch(0.135 0.004 60);    /* #0F0F10-ish */
+  --background: oklch(0.135 0.004 60);
+  --foreground: oklch(0.96 0 0);
 
+  --surface:    oklch(0.18 0.004 60);     /* cards */
+  --card:       oklch(0.18 0.004 60);
+  --card-foreground: oklch(0.96 0 0);
+
+  --popover:    oklch(0.20 0.004 60);
+  --popover-foreground: oklch(0.96 0 0);
+
+  --primary:    oklch(0.96 0 0);          /* white buttons in dark */
+  --primary-foreground: oklch(0.18 0.005 60);
+
+  --secondary:  oklch(0.22 0.004 60);
+  --secondary-foreground: oklch(0.96 0 0);
+
+  --muted:      oklch(0.22 0.004 60);
+  --muted-foreground: oklch(0.62 0.008 70);
+
+  --accent:     oklch(0.22 0.004 60);
+  --accent-foreground: oklch(0.96 0 0);
+
+  --destructive: oklch(0.68 0.20 27);
+  --border:     oklch(1 0 0 / 0.08);
+  --input:      oklch(1 0 0 / 0.10);
+  --ring:       oklch(1 0 0 / 0.25);
+
+  /* Dark theme monochrome: brand slots aliased to foreground. */
+  --brand-orange:      var(--foreground);
+  --brand-orange-soft: oklch(1 0 0 / 0.08);
+  --brand-green:       var(--foreground);
+  --brand-green-soft:  oklch(1 0 0 / 0.08);
+
+  --chart-1: oklch(0.96 0 0);
+  --chart-2: oklch(0.78 0 0);
+  --chart-3: oklch(0.60 0 0);
+  --chart-4: oklch(0.42 0 0);
+  --chart-5: oklch(0.28 0 0);
+
+  --sidebar: oklch(0.16 0.004 60);
+  --sidebar-foreground: oklch(0.96 0 0);
+  --sidebar-primary: oklch(0.96 0 0);
+  --sidebar-primary-foreground: oklch(0.18 0.005 60);
+  --sidebar-accent: oklch(0.22 0.004 60);
+  --sidebar-accent-foreground: oklch(0.96 0 0);
+  --sidebar-border: oklch(1 0 0 / 0.08);
+  --sidebar-ring: oklch(1 0 0 / 0.25);
+
+  /* Inverse dot-grid for dark theme — subtle light dots on near-black canvas. */
+  --dot-base: #3a3a3a;
+  --dot-active: #6a6a6a;
+}
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
+  html, body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01", "ss03";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   .lucide {
-    stroke-width: 1.5;
+    stroke-width: 1.75;
   }
-  aside .lucide {
+  aside .lucide, nav .lucide {
     stroke-width: 2;
   }
+
+  /* Cursor-style display type: tight, airy, low weight */
+  .font-display {
+    font-family: var(--font-sans);
+    letter-spacing: -0.025em;
+    font-weight: 400;
+  }
+  .font-tagline {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+  .font-code {
+    font-family: var(--font-mono);
+    letter-spacing: 0;
+  }
 }
+
+/* Decorative: subtle dotted grid used on hero surfaces (matches Cursor dashboard).
+   Color is baked into the gradient — don't use currentColor, or every child
+   inheriting `color` (h1, SVGs with fill=currentColor) gets washed out. */
+.bg-dotted {
+  background-image: radial-gradient(
+    oklch(0.18 0 0 / 0.07) 1px,
+    transparent 1px
+  );
+  background-size: 20px 20px;
+}
+.dark .bg-dotted {
+  background-image: radial-gradient(
+    oklch(1 0 0 / 0.06) 1px,
+    transparent 1px
+  );
+}
+
+/* Pill utility so any element can adopt the full-round Cursor shape */
+.rounded-pill { border-radius: 9999px; }

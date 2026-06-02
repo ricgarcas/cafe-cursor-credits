@@ -1,107 +1,76 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { createResendClient } from '@/lib/resend'
-import { sendCouponEmail } from '@/lib/emails/send-coupon-email'
+import { z } from 'zod'
+import { eq, sql } from 'drizzle-orm'
+import { db } from '@/lib/db/client'
+import { attendees, couponCodes, appSettings } from '@/lib/db/schema'
+import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
+import { requireUser } from '@/lib/auth/guard'
+
+const schema = z.object({ attendeeId: z.number().int().positive() })
 
 export async function POST(request: NextRequest) {
-  try {
-    // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+  const gate = await requireUser()
+  if ('response' in gate) return gate.response
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { attendeeId } = await request.json()
-
-    if (!attendeeId) {
-      return NextResponse.json({ error: 'Attendee ID is required' }, { status: 400 })
-    }
-
-    const adminClient = await createAdminClient()
-
-    // Get settings including API key
-    const { data: settings } = await adminClient
-      .from('app_settings')
-      .select('resend_api_key, city_name')
-      .limit(1)
-      .single()
-
-    // Get attendee
-    const { data: attendee, error: attendeeError } = await adminClient
-      .from('attendees')
-      .select()
-      .eq('id', attendeeId)
-      .single()
-
-    if (attendeeError || !attendee) {
-      return NextResponse.json({ error: 'Attendee not found' }, { status: 404 })
-    }
-
-    if (attendee.coupon_code_id) {
-      return NextResponse.json({ error: 'Attendee already has a coupon assigned' }, { status: 400 })
-    }
-
-    // Find available coupon
-    const { data: couponCode, error: couponError } = await adminClient
-      .from('coupon_codes')
-      .select()
-      .eq('is_used', false)
-      .is('used_at', null)
-      .limit(1)
-      .single()
-
-    if (couponError || !couponCode) {
-      return NextResponse.json({ error: 'No available coupon codes' }, { status: 400 })
-    }
-
-    // Assign coupon to attendee
-    const { error: updateAttendeeError } = await adminClient
-      .from('attendees')
-      .update({ coupon_code_id: couponCode.id })
-      .eq('id', attendeeId)
-
-    if (updateAttendeeError) {
-      return NextResponse.json({ error: 'Failed to assign coupon' }, { status: 500 })
-    }
-
-    // Mark coupon as used with tracking info
-    const { error: updateCouponError } = await adminClient
-      .from('coupon_codes')
-      .update({
-        is_used: true,
-        used_at: new Date().toISOString(),
-        used_by_type: 'attendee',
-      })
-      .eq('id', couponCode.id)
-
-    if (updateCouponError) {
-      return NextResponse.json({ error: 'Failed to update coupon status' }, { status: 500 })
-    }
-
-    // Send the email if Resend API key is configured
-    if (settings?.resend_api_key) {
-      try {
-        const resendClient = createResendClient(settings.resend_api_key)
-        await sendCouponEmail({
-          resendClient,
-          attendee: { ...attendee, coupon_code_id: couponCode.id },
-          couponCode,
-          fromName: `Cafe Cursor ${settings.city_name}`,
-        })
-      } catch (emailError) {
-        console.error('Email sending failed:', emailError)
-        // Don't fail the request if email fails
-      }
-    } else {
-      console.warn('Resend API key not configured. Email not sent.')
-    }
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Error assigning coupon:', error)
-    return NextResponse.json({ error: 'Failed to assign coupon' }, { status: 500 })
+  const body = await request.json().catch(() => null)
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Attendee ID is required' }, { status: 400 })
   }
-}
+  const { attendeeId } = parsed.data
 
+  const [attendee] = await db
+    .select()
+    .from(attendees)
+    .where(eq(attendees.id, attendeeId))
+    .limit(1)
+  if (!attendee) {
+    return NextResponse.json({ error: 'Attendee not found' }, { status: 404 })
+  }
+  if (attendee.couponCodeId) {
+    return NextResponse.json({ error: 'Attendee already has a coupon assigned' }, { status: 400 })
+  }
+
+  const now = new Date().toISOString()
+  const [coupon] = await db
+    .update(couponCodes)
+    .set({
+      isUsed: true,
+      usedAt: now,
+      usedByType: 'attendee',
+      updatedAt: now,
+    })
+    .where(
+      sql`${couponCodes.id} = (
+        SELECT id FROM ${couponCodes}
+        WHERE ${couponCodes.isUsed} = 0 AND ${couponCodes.usedAt} IS NULL
+        LIMIT 1
+      )`,
+    )
+    .returning()
+
+  if (!coupon) {
+    return NextResponse.json({ error: 'No available coupon codes' }, { status: 400 })
+  }
+
+  await db
+    .update(attendees)
+    .set({ couponCodeId: coupon.id, updatedAt: now })
+    .where(eq(attendees.id, attendeeId))
+
+  const [settings] = await db.select().from(appSettings).limit(1)
+  if (canSendEmail(settings)) {
+    try {
+      await sendCouponEmail({
+        settings,
+        attendee,
+        couponCode: coupon,
+        fromName: `Cafe Cursor ${settings.cityName}`,
+      })
+    } catch (e) {
+      console.error('email send failed', e)
+    }
+  }
+
+  return NextResponse.json({ success: true })
+}

@@ -1,45 +1,22 @@
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
-import { createLumaService } from '@/lib/luma/service'
+import { db } from '@/lib/db/client'
+import { appSettings } from '@/lib/db/schema'
+import { getSelf } from '@/lib/luma/client'
+import { requireUser } from '@/lib/auth/guard'
 
-export async function GET() {
+export async function POST() {
+  const gate = await requireUser()
+  if ('response' in gate) return gate.response
+
+  const [settings] = await db.select().from(appSettings).limit(1)
+  if (!settings?.lumaApiKey) {
+    return NextResponse.json({ error: 'Luma API key not configured' }, { status: 400 })
+  }
   try {
-    // Fetch API key from database
-    const supabase = await createAdminClient()
-    const { data: settings } = await supabase
-      .from('app_settings')
-      .select('luma_api_key')
-      .limit(1)
-      .single()
-
-    if (!settings?.luma_api_key) {
-      return NextResponse.json(
-        { success: false, error: 'Luma API key not configured. Please set it in Settings.' },
-        { status: 400 }
-      )
-    }
-
-    const luma = createLumaService(settings.luma_api_key)
-    const result = await luma.testConnection()
-
-    if (result.success) {
-      return NextResponse.json({
-        success: true,
-        message: 'Successfully connected to Luma API',
-        user: result.user,
-      })
-    }
-
-    return NextResponse.json(
-      { success: false, error: result.error },
-      { status: 400 }
-    )
-  } catch (error) {
-    console.error('Luma connection test failed:', error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Connection failed' },
-      { status: 500 }
-    )
+    const self = await getSelf(settings.lumaApiKey)
+    return NextResponse.json({ ok: true, self })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Connection failed'
+    return NextResponse.json({ ok: false, error: msg }, { status: 400 })
   }
 }
-

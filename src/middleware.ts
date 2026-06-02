@@ -1,20 +1,61 @@
-import { type NextRequest } from 'next/server'
-import { updateSession } from '@/lib/supabase/middleware'
+import { NextResponse, type NextRequest } from 'next/server'
+import { getIronSession } from 'iron-session'
+import { sessionOptions, type SessionData } from '@/lib/auth/session'
+import { countUsers } from '@/lib/auth/users'
 
-export async function middleware(request: NextRequest) {
-  return await updateSession(request)
-}
-
+/**
+ * Bootstrap + auth gate.
+ *
+ * 1. First-open: if no admin exists, every non-API route funnels to
+ *    /admin-register (even /login, /register, /claim). Cloners don't need to
+ *    memorize the bootstrap URL — any entry point self-redirects.
+ * 2. Auth gate: /admin/* (excluding /admin-register) and /onboarding require
+ *    a valid session; otherwise bounce to /login with a redirect param.
+ *
+ * Needs Node runtime because we query SQLite from middleware.
+ */
 export const config = {
+  runtime: 'nodejs',
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder assets
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|brand/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }
 
+export async function middleware(request: NextRequest) {
+  const { pathname, search } = request.nextUrl
+
+  const isApi = pathname.startsWith('/api')
+  const isBootstrapPage = pathname === '/admin-register'
+
+  // Bootstrap funnel: no admin yet → everything goes to /admin-register.
+  if (!isApi && !isBootstrapPage) {
+    try {
+      const hasAdmin = (await countUsers()) > 0
+      if (!hasAdmin) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/admin-register'
+        url.search = ''
+        return NextResponse.redirect(url)
+      }
+    } catch {
+      // DB unreachable — let the request through rather than lock the app out.
+    }
+  }
+
+  // Auth gate. /admin-register stays public since it IS the bootstrap.
+  const protectedPath =
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname.startsWith('/onboarding')
+  if (!protectedPath) return NextResponse.next()
+
+  const res = NextResponse.next()
+  const session = await getIronSession<SessionData>(request, res, sessionOptions)
+  if (!session.userId) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    url.searchParams.set('redirect', pathname + (search || ''))
+    return NextResponse.redirect(url)
+  }
+  return res
+}
