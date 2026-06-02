@@ -122,7 +122,7 @@ src/
 │   ├── db/              # Drizzle schema + libSQL client
 │   ├── emails/          # Resend templates
 │   └── luma/            # Luma API client + sync
-└── middleware.ts        # Guards /admin and /onboarding
+└── proxy.ts             # Guards /admin and /onboarding
 ```
 
 ## For AI agents

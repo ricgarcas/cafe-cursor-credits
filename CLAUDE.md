@@ -23,7 +23,7 @@ find src -type d -maxdepth 3
 # Most important files when starting a new task:
 cat AGENTS.md                    # conventions + don'ts
 cat src/lib/db/schema.ts         # all data shapes live here
-cat src/middleware.ts            # auth gate for /admin and /onboarding
+cat src/proxy.ts                 # auth gate for /admin and /onboarding
 cat src/lib/auth/guard.ts        # requireUser() used by every admin route
 ```
 

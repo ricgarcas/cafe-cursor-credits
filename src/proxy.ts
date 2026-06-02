@@ -12,16 +12,15 @@ import { countUsers } from '@/lib/auth/users'
  * 2. Auth gate: /admin/* (excluding /admin-register) and /onboarding require
  *    a valid session; otherwise bounce to /login with a redirect param.
  *
- * Needs Node runtime because we query SQLite from middleware.
+ * Proxy always runs on the Node.js runtime, so SQLite queries are fine here.
  */
 export const config = {
-  runtime: 'nodejs',
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|brand/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl
 
   const isApi = pathname.startsWith('/api')

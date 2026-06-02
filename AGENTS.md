@@ -69,7 +69,7 @@ src/
 │   ├── db/       schema.ts (Drizzle tables), client.ts (lazy singleton)
 │   ├── emails/   coupon-email.ts (HTML), send-coupon-email.ts (Resend wrapper)
 │   └── luma/     client.ts (API client), sync.ts (refresh + dispatch)
-└── middleware.ts  guards /admin/* and /onboarding via iron-session cookie
+└── proxy.ts       guards /admin/* and /onboarding via iron-session cookie
 ```
 
 ## Conventions
@@ -201,7 +201,7 @@ See `env.example`. Required:
 | `SESSION_PASSWORD` | 32+ char random string. Encrypts the iron-session cookie. `npm run setup` generates one. |
 | `NEXT_PUBLIC_APP_URL` | Public origin for absolute links in emails |
 
-First admin is bootstrapped via `/admin-register` on a fresh install — middleware funnels all routes there while `countUsers() === 0`, and the API enforces first-admin-only. No registration secret.
+First admin is bootstrapped via `/admin-register` on a fresh install — the proxy funnels all routes there while `countUsers() === 0`, and the API enforces first-admin-only. No registration secret.
 
 API keys (Resend, Luma) are stored **in the database** via the admin Settings
 page, not env vars.
