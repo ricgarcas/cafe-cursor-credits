@@ -38,6 +38,8 @@ export function CouponManagement() {
   const [editOpen, setEditOpen] = useState(false)
   const [bulkCodes, setBulkCodes] = useState('')
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 9
 
   const fetchCoupons = useCallback(async () => {
     setLoading(true)
@@ -45,6 +47,7 @@ export function CouponManagement() {
       const res = await fetch('/api/admin/coupons')
       const json = await res.json()
       setCoupons(json.coupons ?? [])
+      setCurrentPage(1)
     } catch {
       toast.error('Failed to load codes')
     } finally {
@@ -64,6 +67,12 @@ export function CouponManagement() {
       available: coupons.length - used,
     }
   }, [coupons])
+
+  const totalPages = Math.max(1, Math.ceil(coupons.length / itemsPerPage))
+  const pageSlice = coupons.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  )
 
   const createOne = async () => {
     if (!newCode.trim()) return
@@ -203,6 +212,7 @@ export function CouponManagement() {
               No codes yet. Use &quot;Bulk add&quot; to paste in a list.
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -214,7 +224,7 @@ export function CouponManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {coupons.map((c) => (
+                {pageSlice.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell className="font-code text-xs max-w-[320px] truncate">
                       {c.code}
@@ -264,6 +274,32 @@ export function CouponManagement() {
                 ))}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>

@@ -32,6 +32,8 @@ export function AttendeeManagement() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all')
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 9
 
   const fetchAttendees = useCallback(async () => {
     setLoading(true)
@@ -42,6 +44,7 @@ export function AttendeeManagement() {
       const res = await fetch(`/api/admin/attendees?${params.toString()}`)
       const json = await res.json()
       setAttendees(json.attendees ?? [])
+      setCurrentPage(1)
     } catch {
       toast.error('Failed to load attendees')
     } finally {
@@ -61,6 +64,12 @@ export function AttendeeManagement() {
       withoutCoupons: attendees.length - withCoupons,
     }
   }, [attendees])
+
+  const totalPages = Math.max(1, Math.ceil(attendees.length / itemsPerPage))
+  const pageSlice = attendees.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  )
 
   const sendEmail = async (id: number) => {
     try {
@@ -166,6 +175,7 @@ export function AttendeeManagement() {
           ) : attendees.length === 0 ? (
             <div className="py-10 text-center text-muted-foreground">No attendees</div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -178,7 +188,7 @@ export function AttendeeManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {attendees.map((a) => (
+                {pageSlice.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="font-medium">{a.name}</TableCell>
                     <TableCell className="text-muted-foreground">{a.email}</TableCell>
@@ -218,6 +228,32 @@ export function AttendeeManagement() {
                 ))}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>
