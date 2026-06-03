@@ -6,11 +6,21 @@ import { listAllEvents, listAllGuests, type LumaGuest } from './client'
 import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
 
 /**
+ * Luma sets `approval_status` only on approval-gated events; open events leave
+ * it null and those guests always qualify. On gated events we must wait for the
+ * host — never hand credits to guests still pending or already declined.
+ */
+const BLOCKED_APPROVAL = new Set(['pending_approval', 'declined'])
+function isApprovedForCredit(approvalStatus?: string | null) {
+  return !approvalStatus || !BLOCKED_APPROVAL.has(approvalStatus)
+}
+
+/**
  * Refresh the local cache of Luma events from the API. Idempotent. Does NOT
  * pull guests — that's a separate step so the button in the UI is fast.
  */
 export async function refreshLumaEvents(apiKey: string, calendarApiId?: string) {
-  const events = await listAllEvents(apiKey, calendarApiId)
+  const { events, truncated } = await listAllEvents(apiKey, calendarApiId)
   const now = new Date().toISOString()
   let upserted = 0
   for (const ev of events) {
@@ -42,7 +52,7 @@ export async function refreshLumaEvents(apiKey: string, calendarApiId?: string) 
     }
     upserted++
   }
-  return { upserted }
+  return { upserted, truncated }
 }
 
 /**
@@ -53,7 +63,7 @@ export async function refreshLumaEvents(apiKey: string, calendarApiId?: string) 
  * Does NOT assign coupons or send emails — that's `dispatchLumaCoupons`.
  */
 export async function syncLumaGuests(apiKey: string, eventApiId: string) {
-  const fetched = await listAllGuests(apiKey, eventApiId)
+  const { guests: fetched, truncated } = await listAllGuests(apiKey, eventApiId)
   const now = new Date().toISOString()
 
   let upserted = 0
@@ -63,9 +73,10 @@ export async function syncLumaGuests(apiKey: string, eventApiId: string) {
     await upsertGuest(g, eventApiId, now)
     upserted++
 
-    // Mirror confirmed guests into attendees so the main dashboard stats
-    // include them. Skip waitlist/declined/cancelled.
-    if (g.registration_status === 'confirmed') {
+    // Mirror confirmed, credit-eligible guests into attendees so the main
+    // dashboard stats include them. Skip waitlist/declined/cancelled and
+    // anyone still pending host approval on gated events.
+    if (g.registration_status === 'confirmed' && isApprovedForCredit(g.approval_status)) {
       const email = g.email.toLowerCase()
       const existing = await db
         .select({ id: attendees.id })
@@ -91,7 +102,7 @@ export async function syncLumaGuests(apiKey: string, eventApiId: string) {
     .set({ lastSyncedAt: now, isSyncEnabled: true, updatedAt: now })
     .where(eq(lumaEvents.apiId, eventApiId))
 
-  return { upserted, mirrored }
+  return { upserted, mirrored, truncated }
 }
 
 async function upsertGuest(g: LumaGuest, eventApiId: string, now: string) {
@@ -122,59 +133,92 @@ async function upsertGuest(g: LumaGuest, eventApiId: string, now: string) {
 }
 
 /**
- * For every confirmed guest without a coupon yet, assign one atomically and
- * (if Resend is configured) send the credit email. Returns counts for the UI.
+ * For every confirmed guest, ensure exactly one coupon is assigned and the
+ * credit email is sent. Idempotent and retry-safe:
+ *   • A guest whose email already holds a coupon (website register, /claim, or
+ *     a prior sync) reuses that code — the same person never gets two.
+ *   • A guest with a coupon but no email yet is re-attempted, so a failed send
+ *     isn't silently dropped.
+ * Returns counts for the UI.
  */
 export async function dispatchLumaCoupons(eventApiId: string) {
   const [settings] = await db.select().from(appSettings).limit(1)
   const now = new Date().toISOString()
 
+  // Confirmed + credit-eligible (open events, or approved on gated events) that
+  // need a coupon OR need their email sent — the emailSentAt clause makes a
+  // previously failed send retryable instead of stranding the guest.
   const pending = await db
     .select()
     .from(lumaGuests)
     .where(
       sql`${lumaGuests.eventApiId} = ${eventApiId}
           AND ${lumaGuests.registrationStatus} = 'confirmed'
-          AND ${lumaGuests.couponCodeId} IS NULL`,
+          AND (${lumaGuests.approvalStatus} IS NULL
+               OR ${lumaGuests.approvalStatus} NOT IN ('pending_approval', 'declined'))
+          AND (${lumaGuests.couponCodeId} IS NULL OR ${lumaGuests.emailSentAt} IS NULL)`,
     )
 
   let assigned = 0
   let emailed = 0
 
   for (const guest of pending) {
-    const [coupon] = await db
-      .update(couponCodes)
-      .set({
-        isUsed: true,
-        usedAt: now,
-        usedByType: 'luma_guest',
-        updatedAt: now,
+    let couponId = guest.couponCodeId
+
+    if (couponId == null) {
+      // Reserve + link as one unit so a mid-sequence failure can't burn a code
+      // with no owner. Returns null when inventory is exhausted.
+      couponId = await db.transaction(async (tx) => {
+        // Reuse the coupon this email already holds before burning a fresh one.
+        const [prior] = await tx
+          .select({ couponCodeId: attendees.couponCodeId })
+          .from(attendees)
+          .where(eq(attendees.email, guest.email))
+          .limit(1)
+
+        let id = prior?.couponCodeId ?? null
+        if (id == null) {
+          const [coupon] = await tx
+            .update(couponCodes)
+            .set({ isUsed: true, usedAt: now, usedByType: 'luma_guest', updatedAt: now })
+            .where(
+              sql`${couponCodes.id} = (
+                SELECT id FROM ${couponCodes}
+                WHERE ${couponCodes.isUsed} = 0 AND ${couponCodes.usedAt} IS NULL
+                LIMIT 1
+              )`,
+            )
+            .returning()
+          if (!coupon) return null // out of codes
+          id = coupon.id
+        }
+
+        await tx
+          .update(lumaGuests)
+          .set({ couponCodeId: id, updatedAt: now })
+          .where(eq(lumaGuests.id, guest.id))
+
+        // Mirror onto the attendee, but only fill an empty slot — never clobber
+        // a coupon they already hold (that would orphan the old code).
+        await tx
+          .update(attendees)
+          .set({ couponCodeId: id, updatedAt: now })
+          .where(sql`${attendees.email} = ${guest.email} AND ${attendees.couponCodeId} IS NULL`)
+
+        return id
       })
-      .where(
-        sql`${couponCodes.id} = (
-          SELECT id FROM ${couponCodes}
-          WHERE ${couponCodes.isUsed} = 0 AND ${couponCodes.usedAt} IS NULL
-          LIMIT 1
-        )`,
-      )
-      .returning()
 
-    if (!coupon) break // out of codes
+      if (couponId == null) break // out of codes
+      assigned++
+    }
 
-    await db
-      .update(lumaGuests)
-      .set({ couponCodeId: coupon.id, updatedAt: now })
-      .where(eq(lumaGuests.id, guest.id))
-
-    // Keep the mirrored attendee in sync too.
-    await db
-      .update(attendees)
-      .set({ couponCodeId: coupon.id, updatedAt: now })
-      .where(eq(attendees.email, guest.email))
-
-    assigned++
-
-    if (canSendEmail(settings)) {
+    if (guest.emailSentAt == null && canSendEmail(settings)) {
+      const [coupon] = await db
+        .select()
+        .from(couponCodes)
+        .where(eq(couponCodes.id, couponId))
+        .limit(1)
+      if (!coupon) continue
       try {
         await sendCouponEmail({
           settings,

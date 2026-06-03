@@ -85,9 +85,10 @@ type ListEventsResponse = {
 export async function listAllEvents(
   apiKey: string,
   calendarApiId?: string,
-): Promise<LumaEventSummary[]> {
+): Promise<{ events: LumaEventSummary[]; truncated: boolean }> {
   const events: LumaEventSummary[] = []
   let cursor: string | undefined
+  let reachedEnd = false
   for (let page = 0; page < 20; page++) {
     const res = await lumaFetch<ListEventsResponse>({
       apiKey,
@@ -100,12 +101,16 @@ export async function listAllEvents(
     for (const entry of res.entries ?? []) {
       if (entry.event) events.push(entry.event)
     }
-    if (!res.has_more || !res.next_cursor) break
+    if (!res.has_more || !res.next_cursor) {
+      reachedEnd = true
+      break
+    }
     cursor = res.next_cursor
     // Light throttle to stay under rate limits.
     await new Promise((r) => setTimeout(r, 200))
   }
-  return events
+  // truncated = we hit the page cap with more pages still waiting.
+  return { events, truncated: !reachedEnd }
 }
 
 export type LumaGuest = {
@@ -129,9 +134,10 @@ type GetGuestsResponse = {
 export async function listAllGuests(
   apiKey: string,
   eventApiId: string,
-): Promise<LumaGuest[]> {
+): Promise<{ guests: LumaGuest[]; truncated: boolean }> {
   const out: LumaGuest[] = []
   let cursor: string | undefined
+  let reachedEnd = false
   for (let page = 0; page < 100; page++) {
     const res = await lumaFetch<GetGuestsResponse>({
       apiKey,
@@ -144,9 +150,13 @@ export async function listAllGuests(
     for (const e of res.entries ?? []) {
       if (e.guest) out.push(e.guest)
     }
-    if (!res.has_more || !res.next_cursor) break
+    if (!res.has_more || !res.next_cursor) {
+      reachedEnd = true
+      break
+    }
     cursor = res.next_cursor
     await new Promise((r) => setTimeout(r, 200))
   }
-  return out
+  // truncated = we hit the page cap with more guests still waiting.
+  return { guests: out, truncated: !reachedEnd }
 }

@@ -57,12 +57,28 @@ describe('listAllEvents', () => {
         }),
       )
 
-    const events = await listAllEvents('sk-test')
+    const { events, truncated } = await listAllEvents('sk-test')
     expect(events.map((e) => e.api_id)).toEqual(['evt-1', 'evt-2'])
+    expect(truncated).toBe(false)
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
     // Second call forwards the cursor returned by the first.
     expect(fetchMock.mock.calls[1][0]).toContain('pagination_cursor=c2')
+  })
+
+  it('flags truncation when the page cap is hit with more pages waiting', async () => {
+    // Every page reports has_more — listAllEvents caps at 20 pages.
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        entries: [{ event: { api_id: 'evt-x', name: 'X' } }],
+        has_more: true,
+        next_cursor: 'next',
+      }),
+    )
+
+    const { truncated } = await listAllEvents('sk-test')
+    expect(truncated).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(20)
   })
 
   it('omits empty query params and includes calendar id when given', async () => {
@@ -72,6 +88,12 @@ describe('listAllEvents', () => {
     const url = fetchMock.mock.calls[0][0] as string
     expect(url).toContain('calendar_api_id=cal-123')
     expect(url).not.toContain('pagination_cursor=') // undefined cursor dropped
+  })
+
+  it('reports not-truncated on a single complete page', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ entries: [], has_more: false }))
+    const { truncated } = await listAllEvents('sk-test')
+    expect(truncated).toBe(false)
   })
 })
 
@@ -97,8 +119,9 @@ describe('listAllGuests', () => {
         }),
       )
 
-    const guests = await listAllGuests('sk-test', 'evt-1')
+    const { guests, truncated } = await listAllGuests('sk-test', 'evt-1')
     expect(guests.map((g) => g.api_id)).toEqual(['g1', 'g2'])
+    expect(truncated).toBe(false)
     expect(fetchMock.mock.calls[0][0]).toContain('event_api_id=evt-1')
   })
 })

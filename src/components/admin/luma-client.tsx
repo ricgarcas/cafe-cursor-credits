@@ -81,6 +81,9 @@ export function LumaClient({
         })),
       )
       toast.success(`Refreshed — ${json.upserted} events`)
+      if (json.truncated) {
+        toast.warning('Hit the page limit — some events may be missing. Refresh again.')
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to refresh')
     } finally {
@@ -107,6 +110,9 @@ export function LumaClient({
         parts.push(`${json.dispatch.emailed} emails sent`)
       }
       toast.success(parts.join(' · '))
+      if (json.sync.truncated) {
+        toast.warning('Hit the page limit — some guests may be missing. Sync again.')
+      }
       router.refresh()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Sync failed')
