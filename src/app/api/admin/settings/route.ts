@@ -14,6 +14,7 @@ const schema = z.object({
   brand_accent: z.enum(['orange', 'green', 'violet', 'blue']).optional(),
   event_tagline: z.string().max(255).nullable().optional(),
   onboarded: z.boolean().optional(),
+  claim_enabled: z.boolean().optional(),
 
   // Email provider + credentials.
   email_provider: z.enum(['resend', 'smtp']).optional(),
@@ -40,6 +41,7 @@ function rowToDto(row: typeof appSettings.$inferSelect) {
     brand_accent: row.brandAccent,
     event_tagline: row.eventTagline,
     onboarded: row.onboarded,
+    claim_enabled: row.claimEnabled,
 
     email_provider: row.emailProvider,
     from_email: row.fromEmail,
@@ -78,6 +80,7 @@ export async function GET() {
       language: 'en',
       brand_accent: 'orange',
       onboarded: false,
+      claim_enabled: true,
       country: null,
       event_tagline: null,
       email_provider: 'resend',
@@ -129,6 +132,7 @@ export async function PUT(request: NextRequest) {
   if (parsed.data.brand_accent !== undefined) update.brandAccent = parsed.data.brand_accent
   if (parsed.data.event_tagline !== undefined) update.eventTagline = parsed.data.event_tagline
   if (parsed.data.onboarded !== undefined) update.onboarded = parsed.data.onboarded
+  if (parsed.data.claim_enabled !== undefined) update.claimEnabled = parsed.data.claim_enabled
   if (parsed.data.from_email !== undefined)
     update.fromEmail = parsed.data.from_email ? parsed.data.from_email : null
   if (parsed.data.email_provider !== undefined) update.emailProvider = parsed.data.email_provider

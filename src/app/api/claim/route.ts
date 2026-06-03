@@ -29,6 +29,10 @@ export async function POST(request: NextRequest) {
 
     const [settings] = await db.select().from(appSettings).limit(1)
 
+    if (settings && !settings.claimEnabled) {
+      return NextResponse.json({ error: 'The claim portal is currently closed.' }, { status: 403 })
+    }
+
     // Existing attendee?
     const [existing] = await db
       .select()

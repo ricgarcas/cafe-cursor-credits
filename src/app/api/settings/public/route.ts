@@ -8,6 +8,7 @@ const DEFAULTS = {
   language: 'en',
   brand_accent: 'orange' as const,
   event_tagline: null,
+  claim_enabled: true,
 }
 
 export async function GET() {
@@ -21,6 +22,7 @@ export async function GET() {
       language: row.language,
       brand_accent: row.brandAccent,
       event_tagline: row.eventTagline,
+      claim_enabled: row.claimEnabled,
     })
   } catch (e) {
     console.error('public settings error', e)

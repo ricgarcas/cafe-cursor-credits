@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Switch } from '@/components/ui/switch'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Loader2, Save, Check, ChevronsUpDown, Eye, EyeOff, Key, Pencil, Lock } from 'lucide-react'
+import { Loader2, Save, Check, ChevronsUpDown, Eye, EyeOff, Pencil, Lock, MapPin, Ticket, Mail, CalendarDays } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { UNCHANGED } from '@/lib/secrets'
@@ -48,6 +49,7 @@ const schema = z.object({
   timezone: z.string().min(1),
   language: z.string().min(2).max(10),
   event_tagline: z.string().max(255).nullable().optional(),
+  claim_enabled: z.boolean(),
   email_provider: z.enum(['resend', 'smtp']),
   resend_api_key: z.string().nullable().optional(),
   from_email: z.union([z.string().email(), z.literal('')]).nullable().optional(),
@@ -61,10 +63,19 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
+const SECTIONS = [
+  { id: 'general', label: 'General', icon: MapPin },
+  { id: 'claim', label: 'Claim portal', icon: Ticket },
+  { id: 'email', label: 'Email', icon: Mail },
+  { id: 'luma', label: 'Luma', icon: CalendarDays },
+] as const
+type SectionId = (typeof SECTIONS)[number]['id']
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [tzOpen, setTzOpen] = useState(false)
+  const [section, setSection] = useState<SectionId>('general')
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -74,6 +85,7 @@ export default function SettingsPage() {
       timezone: 'America/Mexico_City',
       language: 'en',
       event_tagline: '',
+      claim_enabled: true,
       email_provider: 'resend',
       resend_api_key: '',
       from_email: '',
@@ -97,6 +109,7 @@ export default function SettingsPage() {
           timezone: s.timezone ?? 'America/Mexico_City',
           language: s.language ?? 'en',
           event_tagline: s.event_tagline ?? '',
+          claim_enabled: s.claim_enabled ?? true,
           email_provider: s.email_provider ?? 'resend',
           // Secrets: if set, seed with sentinel so the form knows not to overwrite.
           resend_api_key: s.resend_api_key_set ? UNCHANGED : '',
@@ -160,7 +173,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-8 max-w-4xl">
       <div>
         <h1 className="font-display text-3xl tracking-tight">Settings</h1>
         <p className="mt-1 text-muted-foreground">
@@ -169,8 +182,35 @@ export default function SettingsPage() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <Card>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="flex flex-col md:flex-row md:items-start gap-6"
+        >
+          <nav className="md:w-48 shrink-0 flex md:flex-col gap-1 overflow-x-auto">
+            {SECTIONS.map((s) => {
+              const Icon = s.icon
+              const active = section === s.id
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSection(s.id)}
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-full px-4 py-2 text-sm transition-colors shrink-0 text-left',
+                    active
+                      ? 'bg-foreground text-background'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  {s.label}
+                </button>
+              )
+            })}
+          </nav>
+
+          <div className="flex-1 min-w-0 space-y-6">
+          <Card className={cn(section !== 'general' && 'hidden')}>
             <CardHeader>
               <CardTitle>City</CardTitle>
               <CardDescription>Displayed throughout your deployment.</CardDescription>
@@ -281,13 +321,41 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={cn(section !== 'claim' && 'hidden')}>
+            <CardHeader>
+              <CardTitle>Claim portal</CardTitle>
+              <CardDescription>
+                The public <span className="font-code">/claim</span> page where attendees self-serve a code on the spot.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FormField
+                control={form.control}
+                name="claim_enabled"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between gap-4 space-y-0">
+                    <div>
+                      <FormLabel>Accept claims</FormLabel>
+                      <FormDescription>
+                        Turn off to close the portal — visitors see a “closed” message and codes can’t be claimed.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className={cn(section !== 'email' && 'hidden')}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Key className="size-5" /> Integrations
+                <Mail className="size-5" /> Email
               </CardTitle>
               <CardDescription>
-                API keys are stored locally. Once saved they&apos;re never sent back to the browser — you&apos;ll only see a masked preview.
+                Used to send credit-code emails. Keys are stored locally — once saved they&apos;re never sent back to the browser, you&apos;ll only see a masked preview.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -470,7 +538,19 @@ export default function SettingsPage() {
                   />
                 </>
               )}
-              <div className="h-px bg-border" />
+            </CardContent>
+          </Card>
+
+          <Card className={cn(section !== 'luma' && 'hidden')}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="size-5" /> Luma
+              </CardTitle>
+              <CardDescription>
+                Connect a Luma calendar to sync guests. Optional — only needed if you run events on Luma.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
               <FormField
                 control={form.control}
                 name="luma_api_key"
@@ -520,6 +600,7 @@ export default function SettingsPage() {
                 </>
               )}
             </Button>
+          </div>
           </div>
         </form>
       </Form>

@@ -86,6 +86,21 @@ export default function ClaimPage() {
     }
   }
 
+  if (settings.claim_enabled === false) {
+    return (
+      <PublicShell title="Claim portal closed">
+        <Card>
+          <CardContent className="py-6 text-center space-y-2">
+            <p className="font-medium">Code claiming isn’t open right now.</p>
+            <p className="text-sm text-muted-foreground">
+              Check back during the event or ask an organizer for help.
+            </p>
+          </CardContent>
+        </Card>
+      </PublicShell>
+    )
+  }
+
   return (
     <PublicShell
       title="Grab your credits"

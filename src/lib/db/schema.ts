@@ -100,6 +100,10 @@ export const appSettings = sqliteTable('app_settings', {
   eventTagline: text('event_tagline'),
   onboarded: integer('onboarded', { mode: 'boolean' }).notNull().default(false),
 
+  // Public /claim self-service portal. When off, the page shows a closed
+  // state and the API rejects claims.
+  claimEnabled: integer('claim_enabled', { mode: 'boolean' }).notNull().default(true),
+
   // Which email transport to use. 'resend' is the hosted path; 'smtp' is
   // generic SMTP with Gmail presets offered in the UI.
   emailProvider: text('email_provider', { enum: ['resend', 'smtp'] })

@@ -8,6 +8,7 @@ import { PublicBackdrop } from '@/components/public/backdrop'
 type PublicSettings = {
   city_name: string
   event_tagline?: string | null
+  claim_enabled?: boolean
 }
 
 export function usePublicSettings() {
