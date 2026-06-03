@@ -38,9 +38,10 @@ const navigation = [
 
 interface Props {
   user: AdminUser
+  city?: string
 }
 
-export function AdminSidebar({ user }: Props) {
+export function AdminSidebar({ user, city }: Props) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -63,7 +64,7 @@ export function AdminSidebar({ user }: Props) {
     <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
       <div className="flex min-h-0 flex-1 flex-col bg-sidebar border-r border-sidebar-border">
         <div className="px-5 h-16 flex items-center border-b border-sidebar-border">
-          <Wordmark />
+          <Wordmark city={city} />
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">

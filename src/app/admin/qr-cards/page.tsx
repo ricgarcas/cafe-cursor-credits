@@ -18,7 +18,7 @@ async function getAvailableCodes() {
 async function getCity() {
   await ensureDefaultSettings()
   const [row] = await db.select().from(appSettings).limit(1)
-  return { city: row?.cityName ?? 'Cafe Cursor', tagline: row?.eventTagline ?? null }
+  return { city: row?.cityName ?? 'Cafe Cursor' }
 }
 
 export default async function QrCardsPage() {
@@ -32,7 +32,7 @@ export default async function QrCardsPage() {
           contains one unused code — save as PDF from the browser print dialog.
         </p>
       </div>
-      <QrCardsClient codes={codes} city={meta.city} tagline={meta.tagline ?? undefined} />
+      <QrCardsClient codes={codes} city={meta.city} />
     </div>
   )
 }

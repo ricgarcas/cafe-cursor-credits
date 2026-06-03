@@ -33,18 +33,13 @@ export function Wordmark({
 }) {
   return (
     <div className={cn("flex items-center gap-3 text-foreground/80", className)}>
-      <CursorCube className="size-6" />
-      <span className="font-normal tracking-[-0.015em] text-[18px]">
-        Cafe Cursor
-      </span>
-      {city ? (
-        <>
-          <span className="h-4 w-px bg-border" />
-          <span className="text-[18px] text-muted-foreground tracking-[-0.015em]">
-            {city}
-          </span>
-        </>
-      ) : null}
+      <CursorCube className="size-6 shrink-0" />
+      <div className="leading-tight tracking-[-0.015em]">
+        <div className="text-[18px]">Cafe Cursor</div>
+        {city ? (
+          <div className="text-[13px] text-muted-foreground">{city}</div>
+        ) : null}
+      </div>
     </div>
   )
 }

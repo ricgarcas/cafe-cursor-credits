@@ -128,8 +128,15 @@ async function main() {
     args: [ADMIN.email, ADMIN.name, hash],
   })
 
+  // --- attendees, with ~60% holding an assigned (used) coupon ---
+  const attendees = makeAttendees(42)
+
   // --- coupon codes ---
-  const codes = makeCodes(60)
+  // Leave exactly AVAILABLE_CODES unused so the QR-cards preview can fill
+  // whole pages (36 → 4 pages of 9).
+  const AVAILABLE_CODES = 36
+  const willUse = attendees.filter((_, i) => i % 5 !== 0).length
+  const codes = makeCodes(willUse + AVAILABLE_CODES)
   await db.batch(
     codes.map((code) => ({
       sql: 'INSERT INTO coupon_codes (code) VALUES (?)',
@@ -138,9 +145,6 @@ async function main() {
     'write',
   )
   const codeRows = (await db.execute('SELECT id FROM coupon_codes ORDER BY id')).rows
-
-  // --- attendees, with ~60% holding an assigned (used) coupon ---
-  const attendees = makeAttendees(42)
   let codeCursor = 0
   for (let i = 0; i < attendees.length; i++) {
     const a = attendees[i]
