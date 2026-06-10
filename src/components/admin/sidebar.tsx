@@ -12,6 +12,7 @@ import {
   Sparkles,
   QrCode,
   CalendarDays,
+  UserPlus,
 } from 'lucide-react'
 type AdminUser = { email: string; name?: string; role?: string }
 import { Button } from '@/components/ui/button'
@@ -34,7 +35,8 @@ const navigation = [
   { name: 'Coupons', href: '/admin/coupons', icon: Ticket },
   { name: 'QR cards', href: '/admin/qr-cards', icon: QrCode },
   { name: 'Luma', href: '/admin/luma', icon: CalendarDays },
-  { name: 'Settings', href: '/admin/settings', icon: Settings },
+  { name: 'Team', href: '/admin/team', icon: UserPlus, adminOnly: true },
+  { name: 'Settings', href: '/admin/settings', icon: Settings, adminOnly: true },
 ]
 
 interface Props {
@@ -71,7 +73,9 @@ export function AdminSidebar({ user, city }: Props) {
         <EventSwitcher canManage={user.role !== 'host'} />
 
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navigation.map((item) => {
+          {navigation
+            .filter((item) => !item.adminOnly || user.role !== 'host')
+            .map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <Link
