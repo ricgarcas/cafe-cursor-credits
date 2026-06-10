@@ -20,11 +20,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Search, Send, Ticket, Trash2, Download, Check } from 'lucide-react'
+import { Search, Send, Ticket, Trash2, Download, Check, Pencil, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 
 type FilterStatus = 'all' | 'with_coupon' | 'without_coupon'
+
+/** People-lens row — `id` is the person id. */
+type PersonRow = {
+  id: number
+  name: string
+  email: string
+  events_attended: number
+  first_seen: string | null
+  last_seen: string | null
+}
 
 /** Event-lens row — `id` is the participation id, not the person id. */
 type AttendeeRow = {
@@ -41,11 +60,16 @@ type AttendeeRow = {
 }
 
 export function AttendeeManagement() {
+  const [view, setView] = useState<'event' | 'people'>('event')
   const [attendees, setAttendees] = useState<AttendeeRow[]>([])
+  const [people, setPeople] = useState<PersonRow[]>([])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all')
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
+  const [editing, setEditing] = useState<AttendeeRow | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
   const itemsPerPage = 9
 
   const fetchAttendees = useCallback(async () => {
@@ -65,9 +89,23 @@ export function AttendeeManagement() {
     }
   }, [search, statusFilter])
 
+  const fetchPeople = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/admin/attendees?view=people')
+      const json = await res.json()
+      setPeople(json.people ?? [])
+    } catch {
+      toast.error('Failed to load people')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
-    fetchAttendees()
-  }, [fetchAttendees])
+    if (view === 'people') fetchPeople()
+    else fetchAttendees()
+  }, [view, fetchAttendees, fetchPeople])
 
   const stats = useMemo(() => {
     const withCoupons = attendees.filter((a) => a.coupon_code).length
@@ -140,6 +178,65 @@ export function AttendeeManagement() {
     } else toast.error('Failed to remove')
   }
 
+  const openEdit = (row: AttendeeRow) => {
+    setEditing(row)
+    setEditName(row.name)
+    setEditEmail(row.email)
+  }
+
+  const saveEdit = async () => {
+    if (!editing) return
+    const res = await fetch(`/api/admin/attendees/${editing.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: editName, email: editEmail }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(json.error || 'Could not save')
+      return
+    }
+    setEditing(null)
+    toast.success('Saved')
+    fetchAttendees()
+  }
+
+  const reassign = async (id: number) => {
+    if (!confirm('Assign a fresh code? The old one stays used — it already went out.')) return
+    const res = await fetch(`/api/admin/attendees/${id}/reassign`, { method: 'POST' })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(json.error || 'Could not reassign')
+      return
+    }
+    toast.success(`New code: ${json.code}`)
+    fetchAttendees()
+  }
+
+  const removePerson = async (p: PersonRow) => {
+    if (!confirm(`Removes ${p.name} and their history from every event. This is permanent.`)) return
+    const res = await fetch(`/api/admin/attendees/${p.id}?person=true`, { method: 'DELETE' })
+    if (res.ok) {
+      toast.success('Person removed')
+      fetchPeople()
+    } else toast.error('Failed to remove')
+  }
+
+  const exportPeopleCsv = () => {
+    const headers = ['Name', 'Email', 'Events attended', 'First seen', 'Last seen']
+    const rows = people.map((p) => [p.name, p.email, p.events_attended, p.first_seen, p.last_seen])
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `people-${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   const exportCsv = () => {
     const headers = ['Name', 'Email', 'Registered At', 'Code', 'Source']
     const rows = attendees.map((a) => [
@@ -163,6 +260,68 @@ export function AttendeeManagement() {
 
   return (
     <div className="space-y-6">
+      <Tabs value={view} onValueChange={(v) => setView(v as 'event' | 'people')}>
+        <TabsList>
+          <TabsTrigger value="event">This event</TabsTrigger>
+          <TabsTrigger value="people">All people</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {view === 'people' ? (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {people.length} {people.length === 1 ? 'person' : 'people'} across all events
+              </span>
+              <Button variant="outline" onClick={exportPeopleCsv}>
+                <Download className="size-4" /> Export CSV
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="py-10 text-center text-muted-foreground">Loading…</div>
+            ) : people.length === 0 ? (
+              <div className="py-10 text-center text-muted-foreground">No people yet</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Events</TableHead>
+                    <TableHead>First seen</TableHead>
+                    <TableHead>Last seen</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {people.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.email}</TableCell>
+                      <TableCell>{p.events_attended}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {p.first_seen ? format(new Date(p.first_seen), 'MMM d, yyyy') : '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {p.last_seen ? format(new Date(p.last_seen), 'MMM d, yyyy') : '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon-sm" onClick={() => removePerson(p)} title="Delete person">
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+      <>
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard label="Total" value={stats.total} />
         <StatCard label="With code" value={stats.withCoupons} tone="green" />
@@ -256,16 +415,24 @@ export function AttendeeManagement() {
                       {a.registered_at ? format(new Date(a.registered_at), 'MMM d, HH:mm') : ''}
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button variant="ghost" size="icon-sm" onClick={() => openEdit(a)} title="Edit">
+                        <Pencil className="size-4" />
+                      </Button>
                       {!a.coupon_code ? (
                         <Button variant="ghost" size="icon-sm" onClick={() => assignCoupon(a.id)} title="Assign code">
                           <Ticket className="size-4" />
                         </Button>
                       ) : (
-                        <Button variant="ghost" size="icon-sm" onClick={() => sendEmail(a.id)} title="Resend email">
-                          <Send className="size-4" />
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="icon-sm" onClick={() => sendEmail(a.id)} title="Resend email">
+                            <Send className="size-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon-sm" onClick={() => reassign(a.id)} title="Reassign code">
+                            <RefreshCw className="size-4" />
+                          </Button>
+                        </>
                       )}
-                      <Button variant="ghost" size="icon-sm" onClick={() => remove(a.id)} title="Delete">
+                      <Button variant="ghost" size="icon-sm" onClick={() => remove(a.id)} title="Remove from event">
                         <Trash2 className="size-4" />
                       </Button>
                     </TableCell>
@@ -302,6 +469,31 @@ export function AttendeeManagement() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
+
+      <Dialog open={Boolean(editing)} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit attendee</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input id="edit-name" value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input id="edit-email" type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button shape="pill" onClick={saveEdit} disabled={!editName.trim() || !editEmail.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
