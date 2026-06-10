@@ -7,6 +7,7 @@ export interface SessionData {
   userId?: number
   email?: string
   name?: string
+  selectedEventId?: number
 }
 
 const password = process.env.SESSION_PASSWORD
