@@ -37,7 +37,7 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
-      router.push(redirect)
+      router.push(json.must_change_password ? '/change-password' : redirect)
       router.refresh()
     } catch {
       setError('Something went wrong. Please try again.')
@@ -91,6 +91,11 @@ export default function LoginPage() {
                 </>
               )}
             </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              <a href="/forgot-password" className="underline underline-offset-4 hover:text-foreground">
+                Forgot password?
+              </a>
+            </p>
           </form>
         </CardContent>
       </Card>

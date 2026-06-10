@@ -31,5 +31,5 @@ export async function POST(request: NextRequest) {
   session.name = user.name
   await session.save()
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, must_change_password: user.mustChangePassword })
 }

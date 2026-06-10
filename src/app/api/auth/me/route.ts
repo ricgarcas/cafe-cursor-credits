@@ -67,5 +67,11 @@ export async function GET() {
   const gate = await requireUser()
   if ('response' in gate) return gate.response
   const { user } = gate
-  return NextResponse.json({ id: user.id, name: user.name, email: user.email })
+  return NextResponse.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    must_change_password: user.mustChangePassword,
+  })
 }
