@@ -12,6 +12,12 @@ export const users = sqliteTable(
     email: text('email').notNull(),
     name: text('name').notNull(),
     passwordHash: text('password_hash').notNull(),
+    role: text('role', { enum: ['admin', 'host'] }).notNull().default('admin'),
+    mustChangePassword: integer('must_change_password', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    resetTokenHash: text('reset_token_hash'),
+    resetTokenExpiresAt: text('reset_token_expires_at'),
     createdAt: text('created_at')
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
@@ -103,6 +109,9 @@ export const appSettings = sqliteTable('app_settings', {
   // Public /claim self-service portal. When off, the page shows a closed
   // state and the API rejects claims.
   claimEnabled: integer('claim_enabled', { mode: 'boolean' }).notNull().default(true),
+  checklistDismissed: integer('checklist_dismissed', { mode: 'boolean' })
+    .notNull()
+    .default(false),
 
   // Which email transport to use. 'resend' is the hosted path; 'smtp' is
   // generic SMTP with Gmail presets offered in the UI.
@@ -130,6 +139,72 @@ export const appSettings = sqliteTable('app_settings', {
     .notNull()
     .default(sql`(CURRENT_TIMESTAMP)`),
 })
+
+/** Local meetup editions. Exactly one row is 'active' at a time (app-enforced). */
+export const events = sqliteTable(
+  'events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    eventDate: text('event_date'),
+    status: text('status', { enum: ['draft', 'active', 'archived'] })
+      .notNull()
+      .default('draft'),
+    claimPasscode: text('claim_passcode'),
+    lumaEventApiId: text('luma_event_api_id'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    updatedAt: text('updated_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (t) => ({
+    statusIdx: index('events_status_idx').on(t.status),
+  }),
+)
+
+/** One row per person per event — coupon, check-in, and email state live here. */
+export const eventAttendees = sqliteTable(
+  'event_attendees',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    eventId: integer('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    attendeeId: integer('attendee_id')
+      .notNull()
+      .references(() => attendees.id, { onDelete: 'cascade' }),
+    source: text('source', { enum: ['manual', 'luma', 'website'] })
+      .notNull()
+      .default('website'),
+    registeredAt: text('registered_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    couponCodeId: integer('coupon_code_id').references(() => couponCodes.id, {
+      onDelete: 'set null',
+    }),
+    lumaGuestId: text('luma_guest_id'),
+    checkedInAt: text('checked_in_at'),
+    emailStatus: text('email_status', { enum: ['sent', 'failed', 'skipped'] }),
+    emailError: text('email_error'),
+    emailSentAt: text('email_sent_at'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    updatedAt: text('updated_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (t) => ({
+    eventAttendeeIdx: uniqueIndex('event_attendees_event_attendee_unique').on(
+      t.eventId,
+      t.attendeeId,
+    ),
+    eventIdx: index('event_attendees_event_idx').on(t.eventId),
+    couponIdx: index('event_attendees_coupon_idx').on(t.couponCodeId),
+  }),
+)
 
 /**
  * Cache of Luma events visible to the configured API key. Refreshed on demand
@@ -236,3 +311,17 @@ export type AppSettings = typeof appSettings.$inferSelect
 export type NewAppSettings = typeof appSettings.$inferInsert
 
 export type AttendeeWithCoupon = Attendee & { couponCode: CouponCode | null }
+
+export type Event = typeof events.$inferSelect
+export type NewEvent = typeof events.$inferInsert
+export type EventAttendee = typeof eventAttendees.$inferSelect
+export type NewEventAttendee = typeof eventAttendees.$inferInsert
+
+export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
+  event: one(events, { fields: [eventAttendees.eventId], references: [events.id] }),
+  attendee: one(attendees, { fields: [eventAttendees.attendeeId], references: [attendees.id] }),
+  couponCode: one(couponCodes, {
+    fields: [eventAttendees.couponCodeId],
+    references: [couponCodes.id],
+  }),
+}))
