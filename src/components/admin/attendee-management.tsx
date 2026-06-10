@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { AttendeeWithCoupon } from '@/lib/db/schema'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -27,8 +26,22 @@ import { format } from 'date-fns'
 
 type FilterStatus = 'all' | 'with_coupon' | 'without_coupon'
 
+/** Event-lens row — `id` is the participation id, not the person id. */
+type AttendeeRow = {
+  id: number
+  attendee_id: number
+  name: string
+  email: string
+  source: 'manual' | 'luma' | 'website'
+  registered_at: string | null
+  checked_in_at: string | null
+  email_status: 'sent' | 'failed' | 'skipped' | null
+  email_error: string | null
+  coupon_code: string | null
+}
+
 export function AttendeeManagement() {
-  const [attendees, setAttendees] = useState<AttendeeWithCoupon[]>([])
+  const [attendees, setAttendees] = useState<AttendeeRow[]>([])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all')
   const [loading, setLoading] = useState(true)
@@ -57,7 +70,7 @@ export function AttendeeManagement() {
   }, [fetchAttendees])
 
   const stats = useMemo(() => {
-    const withCoupons = attendees.filter((a) => a.couponCode).length
+    const withCoupons = attendees.filter((a) => a.coupon_code).length
     return {
       total: attendees.length,
       withCoupons,
@@ -76,7 +89,7 @@ export function AttendeeManagement() {
       const res = await fetch('/api/admin/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendeeId: id }),
+        body: JSON.stringify({ participation_id: id }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -93,7 +106,7 @@ export function AttendeeManagement() {
       const res = await fetch('/api/admin/assign-coupon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendeeId: id }),
+        body: JSON.stringify({ participation_id: id }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Failed')
@@ -105,12 +118,12 @@ export function AttendeeManagement() {
   }
 
   const remove = async (id: number) => {
-    if (!confirm('Delete this attendee?')) return
+    if (!confirm('Remove this attendee from the event?')) return
     const res = await fetch(`/api/admin/attendees/${id}`, { method: 'DELETE' })
     if (res.ok) {
-      toast.success('Deleted')
+      toast.success('Removed')
       fetchAttendees()
-    } else toast.error('Failed to delete')
+    } else toast.error('Failed to remove')
   }
 
   const exportCsv = () => {
@@ -118,8 +131,8 @@ export function AttendeeManagement() {
     const rows = attendees.map((a) => [
       a.name,
       a.email,
-      a.registeredAt,
-      a.couponCode?.code ?? '',
+      a.registered_at,
+      a.coupon_code ?? '',
       a.source,
     ])
     const csv = [headers, ...rows]
@@ -198,20 +211,20 @@ export function AttendeeManagement() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {a.couponCode ? (
+                      {a.coupon_code ? (
                         <span className="font-code text-xs">
-                          {a.couponCode.code.slice(0, 24)}
-                          {a.couponCode.code.length > 24 ? '…' : ''}
+                          {a.coupon_code.slice(0, 24)}
+                          {a.coupon_code.length > 24 ? '…' : ''}
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {a.registeredAt ? format(new Date(a.registeredAt), 'MMM d, HH:mm') : ''}
+                      {a.registered_at ? format(new Date(a.registered_at), 'MMM d, HH:mm') : ''}
                     </TableCell>
                     <TableCell className="text-right">
-                      {!a.couponCode ? (
+                      {!a.coupon_code ? (
                         <Button variant="ghost" size="icon-sm" onClick={() => assignCoupon(a.id)} title="Assign code">
                           <Ticket className="size-4" />
                         </Button>
