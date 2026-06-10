@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { eq, sql } from 'drizzle-orm'
-import { db, ensureDefaultSettings } from '@/lib/db/client'
-import { attendees, couponCodes, appSettings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
+import { db } from '@/lib/db/client'
+import { appSettings, couponCodes } from '@/lib/db/schema'
+import { getActiveEvent } from '@/lib/db/events'
+import {
+  findOrCreatePerson,
+  getParticipation,
+  createParticipation,
+  reserveCouponForParticipation,
+  recordEmailResult,
+} from '@/lib/db/participation'
 import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
 
 const schema = z.object({
@@ -11,119 +19,71 @@ const schema = z.object({
   sendEmail: z.boolean().optional().default(false),
 })
 
-/**
- * Self-service on-site claim. Registers the attendee and returns the code
- * directly in the response so the attendee can redeem it immediately from
- * their phone. Idempotent by email.
- */
+/** Self-service on-site claim. Idempotent per email per event. */
 export async function POST(request: NextRequest) {
   try {
-    await ensureDefaultSettings()
     const body = await request.json().catch(() => null)
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
     const { name, email, sendEmail } = parsed.data
-    const normalizedEmail = email.toLowerCase()
 
     const [settings] = await db.select().from(appSettings).limit(1)
-
     if (settings && !settings.claimEnabled) {
       return NextResponse.json({ error: 'The claim portal is currently closed.' }, { status: 403 })
     }
 
-    // Existing attendee?
-    const [existing] = await db
-      .select()
-      .from(attendees)
-      .where(eq(attendees.email, normalizedEmail))
-      .limit(1)
+    const event = await getActiveEvent()
+    const person = await findOrCreatePerson({ name, email })
 
-    if (existing?.couponCodeId) {
+    let participation = await getParticipation(event.id, person.id)
+    if (participation?.couponCodeId) {
       const [existingCode] = await db
         .select()
         .from(couponCodes)
-        .where(eq(couponCodes.id, existing.couponCodeId))
+        .where(eq(couponCodes.id, participation.couponCodeId))
         .limit(1)
       return NextResponse.json({
         success: true,
         alreadyClaimed: true,
         code: existingCode?.code ?? null,
-        attendee: { name: existing.name, email: existing.email },
+        attendee: { name: person.name, email: person.email },
       })
     }
 
-    // Attendee row (insert or reuse).
-    let attendeeId = existing?.id
-    if (!attendeeId) {
-      const [row] = await db
-        .insert(attendees)
-        .values({
-          name,
-          email: normalizedEmail,
-          source: 'website',
-        })
-        .returning()
-      attendeeId = row.id
+    if (!participation) {
+      participation = await createParticipation({
+        eventId: event.id,
+        attendeeId: person.id,
+        source: 'website',
+      })
     }
 
-    // Atomically reserve an unused coupon.
-    const now = new Date().toISOString()
-    const [coupon] = await db
-      .update(couponCodes)
-      .set({
-        isUsed: true,
-        usedAt: now,
-        usedByType: 'attendee',
-        updatedAt: now,
-      })
-      .where(
-        sql`${couponCodes.id} = (
-          SELECT id FROM ${couponCodes}
-          WHERE ${couponCodes.isUsed} = 0 AND ${couponCodes.usedAt} IS NULL
-          LIMIT 1
-        )`,
-      )
-      .returning()
-
+    const coupon = await reserveCouponForParticipation(participation.id)
     if (!coupon) {
       return NextResponse.json({ success: true, code: null, outOfCodes: true })
     }
-
-    await db
-      .update(attendees)
-      .set({ couponCodeId: coupon.id, updatedAt: now })
-      .where(eq(attendees.id, attendeeId))
 
     if (sendEmail && canSendEmail(settings)) {
       try {
         await sendCouponEmail({
           settings: settings!,
-          attendee: {
-            id: attendeeId,
-            name,
-            email: normalizedEmail,
-            couponCodeId: coupon.id,
-            source: 'website',
-            lumaGuestId: null,
-            lumaEventId: null,
-            registeredAt: now,
-            createdAt: now,
-            updatedAt: now,
-          },
+          attendee: { name: person.name, email: person.email },
           couponCode: coupon,
           fromName: `Cafe Cursor ${settings!.cityName}`,
         })
+        await recordEmailResult(participation.id, 'sent')
       } catch (e) {
         console.error('email send failed', e)
+        await recordEmailResult(participation.id, 'failed', e instanceof Error ? e.message : String(e))
       }
     }
 
     return NextResponse.json({
       success: true,
       code: coupon.code,
-      attendee: { name, email: normalizedEmail },
+      attendee: { name: person.name, email: person.email },
     })
   } catch (e) {
     console.error('claim error', e)
