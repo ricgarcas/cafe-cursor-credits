@@ -28,6 +28,8 @@ export async function createUser(params: {
   name: string
   email: string
   password: string
+  role?: 'admin' | 'host'
+  mustChangePassword?: boolean
 }): Promise<User> {
   const passwordHash = await hashPassword(params.password)
   const [row] = await db
@@ -36,6 +38,8 @@ export async function createUser(params: {
       name: params.name,
       email: params.email.toLowerCase(),
       passwordHash,
+      role: params.role ?? 'admin',
+      mustChangePassword: params.mustChangePassword ?? false,
     })
     .returning()
   return row
