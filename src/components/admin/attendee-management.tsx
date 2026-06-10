@@ -204,7 +204,12 @@ export function AttendeeManagement() {
                 {pageSlice.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="font-medium">{a.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{a.email}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        {a.email}
+                        <EmailStatusDot status={a.email_status} error={a.email_error} />
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
                         {a.source}
@@ -272,6 +277,18 @@ export function AttendeeManagement() {
       </Card>
     </div>
   )
+}
+
+function EmailStatusDot({ status, error }: { status: string | null; error: string | null }) {
+  if (!status) return null
+  const tone =
+    status === 'sent'
+      ? 'bg-[color:var(--brand-green)]'
+      : status === 'failed'
+        ? 'bg-foreground'
+        : 'bg-muted-foreground/40'
+  const label = status === 'failed' ? `Email failed: ${error ?? 'unknown'}` : `Email ${status}`
+  return <span title={label} aria-label={label} className={`inline-block size-1.5 rounded-full ${tone}`} />
 }
 
 function StatCard({

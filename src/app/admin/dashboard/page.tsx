@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { desc, eq, sql } from 'drizzle-orm'
 import { db, ensureDefaultSettings } from '@/lib/db/client'
 import { attendees, couponCodes, eventAttendees, appSettings } from '@/lib/db/schema'
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic'
 
 async function getStats(eventId: number) {
   const one = async (q: Promise<{ c: number }[]>) => Number((await q)[0]?.c ?? 0)
-  const [totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal] = await Promise.all([
+  const [totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal, failedEmails] = await Promise.all([
     one(db.select({ c: sql<number>`count(*)` }).from(eventAttendees).where(eq(eventAttendees.eventId, eventId))),
     one(
       db.select({ c: sql<number>`count(*)` }).from(eventAttendees)
@@ -18,8 +19,12 @@ async function getStats(eventId: number) {
     ),
     one(db.select({ c: sql<number>`count(*)` }).from(couponCodes).where(eq(couponCodes.isUsed, false))),
     one(db.select({ c: sql<number>`count(*)` }).from(couponCodes)),
+    one(
+      db.select({ c: sql<number>`count(*)` }).from(eventAttendees)
+        .where(sql`${eventAttendees.eventId} = ${eventId} AND ${eventAttendees.emailStatus} = 'failed'`),
+    ),
   ])
-  return { totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal }
+  return { totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal, failedEmails }
 }
 
 async function getRecentAttendees(eventId: number) {
@@ -138,6 +143,13 @@ export default async function DashboardPage() {
           icon={TrendingUp}
         />
       </div>
+
+      {stats.failedEmails > 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {stats.failedEmails} email{stats.failedEmails === 1 ? '' : 's'} failed to send —{' '}
+          <Link href="/admin/attendees" className="underline underline-offset-4">review in Attendees</Link>.
+        </p>
+      ) : null}
 
       <DashboardAttendeesTable initialAttendees={recentAttendees} />
     </div>
