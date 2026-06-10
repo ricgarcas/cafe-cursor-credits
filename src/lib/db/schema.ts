@@ -41,7 +41,6 @@ export const couponCodes = sqliteTable(
     code: text('code').notNull(),
     isUsed: integer('is_used', { mode: 'boolean' }).notNull().default(false),
     usedAt: text('used_at'),
-    usedByType: text('used_by_type', { enum: ['attendee', 'luma_guest'] }),
     createdAt: text('created_at')
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
@@ -56,8 +55,8 @@ export const couponCodes = sqliteTable(
 )
 
 /**
- * Everyone who registers — via /register, /claim, CSV import, or Luma sync.
- * One row per email. Optionally linked to a coupon row.
+ * People (city-level, permanent). One row per email — participation in any
+ * given event lives in `event_attendees`, not here.
  */
 export const attendees = sqliteTable(
   'attendees',
@@ -65,17 +64,6 @@ export const attendees = sqliteTable(
     id: integer('id').primaryKey({ autoIncrement: true }),
     name: text('name').notNull(),
     email: text('email').notNull(),
-    couponCodeId: integer('coupon_code_id').references(() => couponCodes.id, {
-      onDelete: 'set null',
-    }),
-    source: text('source', { enum: ['manual', 'luma', 'website'] })
-      .notNull()
-      .default('website'),
-    lumaGuestId: text('luma_guest_id'),
-    lumaEventId: text('luma_event_id'),
-    registeredAt: text('registered_at')
-      .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
     createdAt: text('created_at')
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
@@ -85,8 +73,6 @@ export const attendees = sqliteTable(
   },
   (t) => ({
     emailIdx: uniqueIndex('attendees_email_unique').on(t.email),
-    couponIdx: index('attendees_coupon_idx').on(t.couponCodeId),
-    lumaGuestIdx: index('attendees_luma_guest_idx').on(t.lumaGuestId),
   }),
 )
 
@@ -130,7 +116,6 @@ export const appSettings = sqliteTable('app_settings', {
 
   lumaApiKey: text('luma_api_key'),
   lumaCalendarId: text('luma_calendar_id'),
-  lumaEventId: text('luma_event_id'),
 
   createdAt: text('created_at')
     .notNull()
@@ -285,18 +270,6 @@ export type NewLumaEvent = typeof lumaEvents.$inferInsert
 export type LumaGuest = typeof lumaGuests.$inferSelect
 export type NewLumaGuest = typeof lumaGuests.$inferInsert
 
-// ---------------- Relations ----------------
-export const attendeesRelations = relations(attendees, ({ one }) => ({
-  couponCode: one(couponCodes, {
-    fields: [attendees.couponCodeId],
-    references: [couponCodes.id],
-  }),
-}))
-
-export const couponCodesRelations = relations(couponCodes, ({ many }) => ({
-  attendees: many(attendees),
-}))
-
 // ---------------- Types ----------------
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -309,8 +282,6 @@ export type NewCouponCode = typeof couponCodes.$inferInsert
 
 export type AppSettings = typeof appSettings.$inferSelect
 export type NewAppSettings = typeof appSettings.$inferInsert
-
-export type AttendeeWithCoupon = Attendee & { couponCode: CouponCode | null }
 
 export type Event = typeof events.$inferSelect
 export type NewEvent = typeof events.$inferInsert

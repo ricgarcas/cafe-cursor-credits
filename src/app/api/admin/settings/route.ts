@@ -28,7 +28,6 @@ const schema = z.object({
 
   luma_api_key: z.string().nullable().optional(),
   luma_calendar_id: z.string().max(100).nullable().optional(),
-  luma_event_id: z.string().nullable().optional(),
 })
 
 function rowToDto(row: typeof appSettings.$inferSelect) {
@@ -51,7 +50,6 @@ function rowToDto(row: typeof appSettings.$inferSelect) {
     smtp_user: row.smtpUser,
 
     luma_calendar_id: row.lumaCalendarId,
-    luma_event_id: row.lumaEventId,
     // Secrets: never send raw values to the browser. Masked preview + boolean.
     resend_api_key: null,
     resend_api_key_masked: maskSecret(row.resendApiKey),
@@ -93,7 +91,6 @@ export async function GET() {
       smtp_password_masked: null,
       smtp_password_set: false,
       luma_calendar_id: null,
-      luma_event_id: null,
       resend_api_key: null,
       resend_api_key_masked: null,
       resend_api_key_set: false,
@@ -142,7 +139,6 @@ export async function PUT(request: NextRequest) {
   if (parsed.data.smtp_user !== undefined) update.smtpUser = parsed.data.smtp_user
   if (parsed.data.luma_calendar_id !== undefined)
     update.lumaCalendarId = parsed.data.luma_calendar_id
-  if (parsed.data.luma_event_id !== undefined) update.lumaEventId = parsed.data.luma_event_id
 
   // Secrets: skip updates when the form echoed back the masked value.
   if (parsed.data.resend_api_key !== undefined && !isUnchanged(parsed.data.resend_api_key)) {

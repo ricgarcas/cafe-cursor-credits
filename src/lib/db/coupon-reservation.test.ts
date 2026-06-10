@@ -17,7 +17,6 @@ async function reserveOne() {
     .set({
       isUsed: true,
       usedAt: now,
-      usedByType: 'attendee',
       updatedAt: now,
     })
     .where(
@@ -66,7 +65,6 @@ describe('atomic coupon reservation', () => {
     const coupon = await reserveOne()
     expect(coupon?.isUsed).toBe(true)
     expect(coupon?.usedAt).toBeTruthy()
-    expect(coupon?.usedByType).toBe('attendee')
 
     // Double-check the row in the DB reflects the update.
     const [row] = await db

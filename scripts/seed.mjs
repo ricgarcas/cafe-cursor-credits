@@ -144,6 +144,15 @@ async function main() {
     })),
     'write',
   )
+  // One active event to hang participations off.
+  const cityName = settings.rows[0]?.city_name ?? 'Cafe Cursor'
+  const eventName = String(cityName).startsWith('Cafe Cursor') ? cityName : `Cafe Cursor ${cityName}`
+  const evIns = await db.execute({
+    sql: `INSERT INTO events (name, status) VALUES (?, 'active')`,
+    args: [eventName],
+  })
+  const eventId = Number(evIns.lastInsertRowid)
+
   const codeRows = (await db.execute('SELECT id FROM coupon_codes ORDER BY id')).rows
   let codeCursor = 0
   for (let i = 0; i < attendees.length; i++) {
@@ -153,14 +162,18 @@ async function main() {
       couponId = codeRows[codeCursor].id
       codeCursor++
       await db.execute({
-        sql: `UPDATE coupon_codes SET is_used=1, used_at=?, used_by_type='attendee' WHERE id=?`,
+        sql: `UPDATE coupon_codes SET is_used=1, used_at=? WHERE id=?`,
         args: [a.registeredAt, couponId],
       })
     }
+    const personIns = await db.execute({
+      sql: `INSERT INTO attendees (name, email) VALUES (?, ?)`,
+      args: [a.name, a.email],
+    })
     await db.execute({
-      sql: `INSERT INTO attendees (name, email, coupon_code_id, source, registered_at)
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [a.name, a.email, couponId, a.source, a.registeredAt],
+      sql: `INSERT INTO event_attendees (event_id, attendee_id, source, registered_at, coupon_code_id, email_status)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [eventId, Number(personIns.lastInsertRowid), a.source, a.registeredAt, couponId, couponId ? 'sent' : null],
     })
   }
 

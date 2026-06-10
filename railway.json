@@ -5,7 +5,7 @@
     "buildCommand": "npm ci && npm run build"
   },
   "deploy": {
-    "startCommand": "npm run db:push && npm run start",
+    "startCommand": "node scripts/migrate-events.mjs && npm run db:push && npm run start",
     "healthcheckPath": "/api/settings/public",
     "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE",
