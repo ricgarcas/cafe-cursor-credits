@@ -158,7 +158,8 @@ export async function dispatchLumaCoupons(localEventId: number) {
   const [settings] = await db.select().from(appSettings).limit(1)
 
   // Luma-sourced participations of this event needing a coupon or a (re)send —
-  // emailStatus != 'sent' keeps failed sends retryable instead of stranded.
+  // anything not yet 'sent' (null/failed/skipped) stays retryable, so guests
+  // credited before email was configured get their mail on the next sync.
   const pending = await db
     .select()
     .from(eventAttendees)
@@ -168,7 +169,7 @@ export async function dispatchLumaCoupons(localEventId: number) {
           AND ${eventAttendees.source} = 'luma'
           AND (${eventAttendees.couponCodeId} IS NULL
                OR ${eventAttendees.emailStatus} IS NULL
-               OR ${eventAttendees.emailStatus} = 'failed')`,
+               OR ${eventAttendees.emailStatus} != 'sent')`,
     )
 
   let assigned = 0

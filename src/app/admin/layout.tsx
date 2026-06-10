@@ -12,6 +12,7 @@ export default async function AdminLayout({
 }) {
   const user = await currentUser()
   if (!user) redirect('/login')
+  if (user.mustChangePassword) redirect('/change-password')
 
   await ensureDefaultSettings()
   const [settings] = await db.select().from(appSettings).limit(1)

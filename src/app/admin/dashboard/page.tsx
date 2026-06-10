@@ -108,9 +108,11 @@ export default async function DashboardPage() {
   ])
   const city = settings?.cityName ?? 'your city'
 
+  // Pool utilization (global): event-scoped distributed over the global pool
+  // total would mix scopes, so measure the whole pool consistently.
   const distributionRate =
     stats.couponsTotal > 0
-      ? Math.round((stats.couponsDistributed / stats.couponsTotal) * 100)
+      ? Math.round(((stats.couponsTotal - stats.couponsRemaining) / stats.couponsTotal) * 100)
       : 0
 
   const lowInventory =

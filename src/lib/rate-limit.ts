@@ -14,7 +14,9 @@ export function rateLimit(key: string, now = Date.now()): boolean {
     (w) => stamps.filter((t) => now - t < w.windowMs).length < w.limit,
   )
   if (allowed) stamps.push(now)
-  hits.set(key, stamps)
+  // Evict fully-expired keys so the Map can't grow unbounded under abuse.
+  if (stamps.length === 0) hits.delete(key)
+  else hits.set(key, stamps)
   return allowed
 }
 
