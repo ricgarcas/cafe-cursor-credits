@@ -5,6 +5,8 @@ import { attendees, couponCodes, eventAttendees, appSettings } from '@/lib/db/sc
 import { getSelectedEvent } from '@/lib/db/events'
 import { Card, CardContent } from '@/components/ui/card'
 import { DashboardAttendeesTable } from '@/components/admin/dashboard-attendees-table'
+import { GettingStarted } from '@/components/admin/getting-started'
+import { canSendEmail } from '@/lib/emails/send-coupon-email'
 import { Users, Ticket, Gift, TrendingUp, UserCheck } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -49,10 +51,10 @@ async function getRecentAttendees(eventId: number) {
   }))
 }
 
-async function getCity() {
+async function getSettings() {
   await ensureDefaultSettings()
   const [row] = await db.select().from(appSettings).limit(1)
-  return row?.cityName ?? 'your city'
+  return row
 }
 
 function Kpi({
@@ -99,11 +101,12 @@ function Kpi({
 
 export default async function DashboardPage() {
   const event = await getSelectedEvent()
-  const [stats, recentAttendees, city] = await Promise.all([
+  const [stats, recentAttendees, settings] = await Promise.all([
     getStats(event.id),
     getRecentAttendees(event.id),
-    getCity(),
+    getSettings(),
   ])
+  const city = settings?.cityName ?? 'your city'
 
   const distributionRate =
     stats.couponsTotal > 0
@@ -114,6 +117,15 @@ export default async function DashboardPage() {
     stats.couponsTotal > 0 &&
     stats.couponsRemaining <= Math.max(10, Math.ceil(stats.couponsTotal * 0.15))
 
+  const checklist = {
+    dismissed: settings?.checklistDismissed ?? false,
+    eventReady: Boolean(event.eventDate || event.claimPasscode || !event.name.startsWith('Cafe Cursor')),
+    hasCodes: stats.couponsTotal > 0,
+    emailReady: canSendEmail(settings),
+    lumaConnected: Boolean(settings?.lumaApiKey),
+  }
+  const checklistDone = checklist.eventReady && checklist.hasCodes && checklist.emailReady
+
   return (
     <div className="space-y-8">
       <div>
@@ -122,6 +134,17 @@ export default async function DashboardPage() {
           Cafe Cursor <span className="font-tagline">{city}</span> — {event.name}
         </p>
       </div>
+
+      {!checklist.dismissed && !checklistDone ? (
+        <GettingStarted
+          checks={{
+            eventReady: checklist.eventReady,
+            hasCodes: checklist.hasCodes,
+            emailReady: checklist.emailReady,
+            lumaConnected: checklist.lumaConnected,
+          }}
+        />
+      ) : null}
 
       {event.claimPasscode ? (
         <div className="flex items-center gap-3 rounded-[10px] border border-border px-4 py-3">
