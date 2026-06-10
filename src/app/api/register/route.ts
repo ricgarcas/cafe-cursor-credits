@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { and, eq, isNull, sql } from 'drizzle-orm'
-import { db, ensureDefaultSettings } from '@/lib/db/client'
-import { attendees, couponCodes, appSettings } from '@/lib/db/schema'
+import { db } from '@/lib/db/client'
+import { appSettings } from '@/lib/db/schema'
+import { getActiveEvent } from '@/lib/db/events'
+import {
+  findOrCreatePerson,
+  getParticipation,
+  createParticipation,
+  reserveCouponForParticipation,
+  recordEmailResult,
+} from '@/lib/db/participation'
 import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
 
 const schema = z.object({
@@ -12,82 +19,51 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    await ensureDefaultSettings()
     const body = await request.json().catch(() => null)
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
     const { name, email } = parsed.data
-    const normalizedEmail = email.toLowerCase()
 
-    // Reject duplicates (matches old Supabase behavior).
-    const existing = await db
-      .select({ id: attendees.id })
-      .from(attendees)
-      .where(eq(attendees.email, normalizedEmail))
-      .limit(1)
-    if (existing.length > 0) {
+    const event = await getActiveEvent()
+    const person = await findOrCreatePerson({ name, email })
+
+    // Duplicate check is per-event: returning people register fresh next time.
+    if (await getParticipation(event.id, person.id)) {
       return NextResponse.json(
         { error: 'This email is already registered' },
         { status: 400 },
       )
     }
 
-    const [attendee] = await db
-      .insert(attendees)
-      .values({
-        name,
-        email: normalizedEmail,
-        source: 'website',
-      })
-      .returning()
+    const participation = await createParticipation({
+      eventId: event.id,
+      attendeeId: person.id,
+      source: 'website',
+    })
 
-    // Grab an available coupon, assign, mark used — all in one transaction
-    // using a single UPDATE…RETURNING to avoid race conditions with concurrent
-    // registrations.
-    const now = new Date().toISOString()
-    const taken = db
-      .update(couponCodes)
-      .set({
-        isUsed: true,
-        usedAt: now,
-        usedByType: 'attendee',
-        updatedAt: now,
-      })
-      .where(
-        sql`${couponCodes.id} = (
-          SELECT id FROM ${couponCodes}
-          WHERE ${couponCodes.isUsed} = 0
-            AND ${couponCodes.usedAt} IS NULL
-          LIMIT 1
-        )`,
-      )
-      .returning()
-
-    const [coupon] = await taken
+    const coupon = await reserveCouponForParticipation(participation.id)
     let couponAssigned = false
 
     if (coupon) {
-      await db
-        .update(attendees)
-        .set({ couponCodeId: coupon.id, updatedAt: now })
-        .where(eq(attendees.id, attendee.id))
       couponAssigned = true
-
-      // Send the email if an email provider is configured.
       const [settings] = await db.select().from(appSettings).limit(1)
       if (canSendEmail(settings)) {
         try {
           await sendCouponEmail({
             settings,
-            attendee: { ...attendee, couponCodeId: coupon.id },
+            attendee: { name: person.name, email: person.email },
             couponCode: coupon,
             fromName: `Cafe Cursor ${settings.cityName}`,
           })
+          await recordEmailResult(participation.id, 'sent')
         } catch (e) {
           console.error('email send failed', e)
+          await recordEmailResult(participation.id, 'failed', e instanceof Error ? e.message : String(e))
         }
+      } else {
+        await recordEmailResult(participation.id, 'skipped')
       }
     }
 
@@ -103,7 +79,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 })
   }
 }
-
-// Silence unused-import for the `and`/`isNull` helpers so future tweaks can keep them.
-void and
-void isNull
