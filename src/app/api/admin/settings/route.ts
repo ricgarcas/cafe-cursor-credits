@@ -66,7 +66,7 @@ function rowToDto(row: typeof appSettings.$inferSelect) {
 }
 
 export async function GET() {
-  const gate = await requireUser()
+  const gate = await requireUser({ role: 'admin' })
   if ('response' in gate) return gate.response
   await ensureDefaultSettings()
   const [row] = await db.select().from(appSettings).limit(1)
@@ -105,7 +105,7 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const gate = await requireUser()
+  const gate = await requireUser({ role: 'admin' })
   if ('response' in gate) return gate.response
   const body = await request.json().catch(() => null)
   const parsed = schema.safeParse(body)

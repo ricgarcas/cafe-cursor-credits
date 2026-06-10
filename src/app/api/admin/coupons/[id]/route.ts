@@ -11,7 +11,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const gate = await requireUser()
+  const gate = await requireUser({ role: 'admin' })
   if ('response' in gate) return gate.response
 
   const { id } = await params
@@ -42,7 +42,7 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const gate = await requireUser()
+  const gate = await requireUser({ role: 'admin' })
   if ('response' in gate) return gate.response
 
   const { id } = await params
