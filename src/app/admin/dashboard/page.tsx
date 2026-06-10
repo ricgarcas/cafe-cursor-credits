@@ -110,6 +110,10 @@ export default async function DashboardPage() {
       ? Math.round((stats.couponsDistributed / stats.couponsTotal) * 100)
       : 0
 
+  const lowInventory =
+    stats.couponsTotal > 0 &&
+    stats.couponsRemaining <= Math.max(10, Math.ceil(stats.couponsTotal * 0.15))
+
   return (
     <div className="space-y-8">
       <div>
@@ -123,6 +127,18 @@ export default async function DashboardPage() {
         <div className="flex items-center gap-3 rounded-[10px] border border-border px-4 py-3">
           <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Claim passcode</span>
           <span className="font-code text-2xl tracking-widest">{event.claimPasscode}</span>
+        </div>
+      ) : null}
+
+      {lowInventory ? (
+        <div className="flex items-center justify-between rounded-[10px] border border-border px-4 py-3">
+          <p className="text-sm">
+            <span className="font-code">{stats.couponsRemaining}</span>{' '}
+            code{stats.couponsRemaining === 1 ? '' : 's'} remaining in the shared pool.
+          </p>
+          <Link href="/admin/coupons" className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground">
+            Add codes
+          </Link>
         </div>
       ) : null}
 
