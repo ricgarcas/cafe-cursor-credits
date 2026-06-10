@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Search, Send, Ticket, Trash2, Download } from 'lucide-react'
+import { Search, Send, Ticket, Trash2, Download, Check } from 'lucide-react'
 import { format } from 'date-fns'
 
 type FilterStatus = 'all' | 'with_coupon' | 'without_coupon'
@@ -117,6 +117,20 @@ export function AttendeeManagement() {
     }
   }
 
+  const toggleCheckIn = async (row: AttendeeRow) => {
+    const next = row.checked_in_at ? null : new Date().toISOString()
+    setAttendees((prev) => prev.map((a) => (a.id === row.id ? { ...a, checked_in_at: next } : a)))
+    const res = await fetch(`/api/admin/attendees/${row.id}/checkin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checked_in: Boolean(next) }),
+    })
+    if (!res.ok) {
+      toast.error('Could not update check-in')
+      fetchAttendees()
+    }
+  }
+
   const remove = async (id: number) => {
     if (!confirm('Remove this attendee from the event?')) return
     const res = await fetch(`/api/admin/attendees/${id}`, { method: 'DELETE' })
@@ -196,6 +210,7 @@ export function AttendeeManagement() {
                   <TableHead>Email</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Code</TableHead>
+                  <TableHead>Check-in</TableHead>
                   <TableHead>Registered</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -224,6 +239,18 @@ export function AttendeeManagement() {
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant={a.checked_in_at ? 'brandFilled' : 'ghost'}
+                        size="sm"
+                        shape="pill"
+                        onClick={() => toggleCheckIn(a)}
+                        title={a.checked_in_at ? 'Checked in' : 'Check in'}
+                      >
+                        <Check className="size-3.5" />
+                        {a.checked_in_at ? format(new Date(a.checked_in_at), 'HH:mm') : 'Check in'}
+                      </Button>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {a.registered_at ? format(new Date(a.registered_at), 'MMM d, HH:mm') : ''}

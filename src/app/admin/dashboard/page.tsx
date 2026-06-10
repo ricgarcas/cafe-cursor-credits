@@ -5,7 +5,7 @@ import { attendees, couponCodes, eventAttendees, appSettings } from '@/lib/db/sc
 import { getSelectedEvent } from '@/lib/db/events'
 import { Card, CardContent } from '@/components/ui/card'
 import { DashboardAttendeesTable } from '@/components/admin/dashboard-attendees-table'
-import { Users, Ticket, Gift, TrendingUp } from 'lucide-react'
+import { Users, Ticket, Gift, TrendingUp, UserCheck } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +24,11 @@ async function getStats(eventId: number) {
         .where(sql`${eventAttendees.eventId} = ${eventId} AND ${eventAttendees.emailStatus} = 'failed'`),
     ),
   ])
-  return { totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal, failedEmails }
+  const checkedIn = await one(
+    db.select({ c: sql<number>`count(*)` }).from(eventAttendees)
+      .where(sql`${eventAttendees.eventId} = ${eventId} AND ${eventAttendees.checkedInAt} IS NOT NULL`),
+  )
+  return { totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal, failedEmails, checkedIn }
 }
 
 async function getRecentAttendees(eventId: number) {
@@ -122,8 +126,9 @@ export default async function DashboardPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Kpi label="Registrations" value={stats.totalRegistrations} icon={Users} />
+        <Kpi label="Checked in" value={stats.checkedIn} icon={UserCheck} tone="green" />
         <Kpi
           label="Credits claimed"
           value={stats.couponsDistributed}
