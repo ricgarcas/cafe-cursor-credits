@@ -1,11 +1,13 @@
 import 'server-only'
 import bcrypt from 'bcryptjs'
-import { eq } from 'drizzle-orm'
+import { createHash, randomBytes } from 'crypto'
+import { and, eq, gt } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
 import { users, type User } from '@/lib/db/schema'
 import { getSession } from './session'
 
 const SALT_ROUNDS = 10
+const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
 
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, SALT_ROUNDS)
@@ -63,4 +65,42 @@ export async function currentUser(): Promise<User | null> {
 export async function countUsers(): Promise<number> {
   const rows = await db.select({ id: users.id }).from(users)
   return rows.length
+}
+
+/** Returns the raw token to email, or null when no such user. Stored hashed. */
+export async function issueResetToken(email: string): Promise<string | null> {
+  const user = await findUserByEmail(email)
+  if (!user) return null
+  const token = randomBytes(32).toString('hex')
+  await db
+    .update(users)
+    .set({
+      resetTokenHash: sha256(token),
+      resetTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(users.id, user.id))
+  return token
+}
+
+/** Single-use: consumes the token whether by success or by the row update. */
+export async function resetPasswordWithToken(token: string, newPassword: string): Promise<boolean> {
+  const nowIso = new Date().toISOString()
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.resetTokenHash, sha256(token)), gt(users.resetTokenExpiresAt, nowIso)))
+    .limit(1)
+  if (!user) return false
+  await db
+    .update(users)
+    .set({
+      passwordHash: await hashPassword(newPassword),
+      resetTokenHash: null,
+      resetTokenExpiresAt: null,
+      mustChangePassword: false,
+      updatedAt: nowIso,
+    })
+    .where(eq(users.id, user.id))
+  return true
 }

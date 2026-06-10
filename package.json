@@ -11,6 +11,7 @@
     "init": "npm run setup && npm run db:push",
     "db:push": "drizzle-kit push --force",
     "db:migrate-events": "node scripts/migrate-events.mjs",
+    "reset-password": "node scripts/reset-password.mjs",
     "db:reset": "node scripts/reset-db.mjs",
     "db:seed": "node scripts/seed.mjs",
     "db:studio": "drizzle-kit studio",

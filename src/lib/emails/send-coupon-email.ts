@@ -58,6 +58,20 @@ export async function sendCouponEmail({
   return sendViaResend({ settings, attendee, html, subject, fromName })
 }
 
+/** Generic transactional send (reset links, etc.) through the configured provider. */
+export async function sendAppEmail(params: {
+  settings: EmailSettings
+  to: string
+  subject: string
+  html: string
+  fromName?: string
+}) {
+  const { settings, to, subject, html, fromName = 'Cafe Cursor' } = params
+  const provider = settings.emailProvider ?? 'resend'
+  const target = { settings, attendee: { email: to }, html, subject, fromName }
+  return provider === 'smtp' ? sendViaSmtp(target) : sendViaResend(target)
+}
+
 async function sendViaResend({
   settings,
   attendee,
