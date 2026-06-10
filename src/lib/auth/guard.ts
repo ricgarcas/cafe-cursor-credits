@@ -11,13 +11,22 @@ import type { User } from '@/lib/db/schema'
  *   if ('response' in gate) return gate.response
  *   const { user } = gate
  */
-export async function requireUser(): Promise<
-  | { user: User }
-  | { response: NextResponse }
-> {
+export async function requireUser(opts?: {
+  role?: 'admin'
+}): Promise<{ user: User } | { response: NextResponse }> {
   const user = await currentUser()
   if (!user) {
     return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
+  if (opts?.role === 'admin' && user.role !== 'admin') {
+    return { response: NextResponse.json({ error: 'Admin access required' }, { status: 403 }) }
+  }
   return { user }
+}
+
+/** Pure decision used by requireUser — exported for tests. */
+export function gateFor(user: User | null, opts?: { role?: 'admin' }): 401 | 403 | 'ok' {
+  if (!user) return 401
+  if (opts?.role === 'admin' && user.role !== 'admin') return 403
+  return 'ok'
 }
