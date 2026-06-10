@@ -19,7 +19,7 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-background">
-      <AdminSidebar user={{ email: user.email, name: user.name }} city={settings.cityName} />
+      <AdminSidebar user={{ email: user.email, name: user.name, role: user.role }} city={settings.cityName} />
       <div className="lg:pl-64">
         <AdminHeader user={{ email: user.email, name: user.name }} />
         <main className="p-6 md:p-8">{children}</main>

@@ -13,8 +13,9 @@ import {
   QrCode,
   CalendarDays,
 } from 'lucide-react'
-type AdminUser = { email: string; name?: string }
+type AdminUser = { email: string; name?: string; role?: string }
 import { Button } from '@/components/ui/button'
+import { EventSwitcher } from './event-switcher'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,6 +67,8 @@ export function AdminSidebar({ user, city }: Props) {
         <div className="px-5 h-16 flex items-center border-b border-sidebar-border">
           <Wordmark city={city} />
         </div>
+
+        <EventSwitcher canManage={user.role !== 'host'} />
 
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           {navigation.map((item) => {
