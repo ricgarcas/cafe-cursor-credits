@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 const schema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
   email: z.string().email('Enter a valid email').max(255),
+  passcode: z.string().max(32).optional(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -34,7 +35,7 @@ export default function ClaimPage() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', email: '' },
+    defaultValues: { name: '', email: '', passcode: '' },
   })
 
   const onSubmit = async (data: FormValues) => {
@@ -200,6 +201,27 @@ export default function ClaimPage() {
                     </FormItem>
                   )}
                 />
+                {settings.claim_passcode_required && (
+                  <FormField
+                    control={form.control}
+                    name="passcode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Event passcode</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Shown on the screen at the venue"
+                            autoCapitalize="off"
+                            autoComplete="off"
+                            className="font-code"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <Button type="submit" disabled={loading} size="lg" className="w-full">
                   {loading ? (
                     <>

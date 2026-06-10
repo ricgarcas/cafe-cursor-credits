@@ -9,6 +9,7 @@ type PublicSettings = {
   city_name: string
   event_tagline?: string | null
   claim_enabled?: boolean
+  claim_passcode_required?: boolean
 }
 
 export function usePublicSettings() {

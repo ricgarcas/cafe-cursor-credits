@@ -110,6 +110,13 @@ export default async function DashboardPage() {
         </p>
       </div>
 
+      {event.claimPasscode ? (
+        <div className="flex items-center gap-3 rounded-[10px] border border-border px-4 py-3">
+          <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Claim passcode</span>
+          <span className="font-code text-2xl tracking-widest">{event.claimPasscode}</span>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Kpi label="Registrations" value={stats.totalRegistrations} icon={Users} />
         <Kpi

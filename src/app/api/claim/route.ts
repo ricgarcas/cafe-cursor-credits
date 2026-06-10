@@ -12,16 +12,19 @@ import {
   recordEmailResult,
 } from '@/lib/db/participation'
 import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
+import { rateLimit, clientIp, tooManyRequests } from '@/lib/rate-limit'
 
 const schema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email().max(255),
   sendEmail: z.boolean().optional().default(false),
+  passcode: z.string().max(32).optional(),
 })
 
 /** Self-service on-site claim. Idempotent per email per event. */
 export async function POST(request: NextRequest) {
   try {
+    if (!rateLimit(`claim:${clientIp(request)}`)) return tooManyRequests()
     const body = await request.json().catch(() => null)
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
@@ -35,6 +38,14 @@ export async function POST(request: NextRequest) {
     }
 
     const event = await getActiveEvent()
+
+    if (event.claimPasscode) {
+      const given = parsed.data.passcode?.trim().toLowerCase()
+      if (!given || given !== event.claimPasscode.toLowerCase()) {
+        return NextResponse.json({ error: 'Wrong event passcode — check the screen at the venue.' }, { status: 403 })
+      }
+    }
+
     const person = await findOrCreatePerson({ name, email })
 
     let participation = await getParticipation(event.id, person.id)

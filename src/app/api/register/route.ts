@@ -11,6 +11,7 @@ import {
   recordEmailResult,
 } from '@/lib/db/participation'
 import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
+import { rateLimit, clientIp, tooManyRequests } from '@/lib/rate-limit'
 
 const schema = z.object({
   name: z.string().min(1).max(255),
@@ -19,6 +20,7 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    if (!rateLimit(`register:${clientIp(request)}`)) return tooManyRequests()
     const body = await request.json().catch(() => null)
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
