@@ -201,6 +201,17 @@ shows the shared pool (unused codes), unchanged otherwise.
 
 ## 13. Migration
 
+> **Implemented mechanism (amended):** rather than adopting versioned
+> migrations, the release keeps `drizzle-kit push --force` and adds one
+> idempotent upgrade script, `scripts/migrate-events.mjs`, that runs *before*
+> `db:push` on boot (`node scripts/migrate-events.mjs && npm run db:push && npm run start`).
+> It creates the new tables, backfills participation rows from the legacy
+> attendee columns (mapping `luma_guests.email_sent_at` → `email_status`),
+> then drops the legacy columns — so `db:push` only has to reconcile the
+> already-clean schema. Same safety, far less machinery on a single-DB app;
+> it self-detects an already-upgraded DB and no-ops. The original
+> versioned-migration plan below is retained for context.
+
 This release moves the repo from `drizzle-kit push --force` on boot to
 **versioned migrations** (`drizzle-kit generate` + `drizzle-kit migrate` in
 the start command / `railway.json`), because the data backfill must run

@@ -6,9 +6,11 @@
 
 ## TL;DR for Claude Code
 
-**Cafe Cursor** — Next.js 16 + SQLite (Drizzle + better-sqlite3) +
+**Cafe Cursor** — Next.js 16 + SQLite (Drizzle + `@libsql/client`) +
 iron-session auth. Event registration + Cursor credit distribution for
-community meetups. One deployment per city, built for the
+community meetups. One deployment per city, multi-event within it: people
+and the coupon pool are city-level, participation (`event_attendees`) is
+per-event. Built for the
 [Cursor Ambassador Community](https://cursor.com/ambassadors).
 
 **Don't re-add Supabase.** It was deliberately removed; the DB is now SQLite.

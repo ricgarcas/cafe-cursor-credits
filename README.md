@@ -95,16 +95,28 @@ After deploy:
 | Route | Who | Purpose |
 |---|---|---|
 | `/register` | Public | Register, code emailed |
-| `/claim` | Public | On-site registration, code on screen |
-| `/login` | Admin | Sign in |
-| `/admin-register` | Public | Self-register as admin (needs the secret phrase) |
+| `/claim` | Public | On-site registration (asks for the venue passcode when the active event sets one), code on screen |
+| `/login` | Admin/Host | Sign in |
+| `/forgot-password` | Public | Request a reset link (emailed) |
+| `/reset-password` | Public | Set a new password from a reset link |
+| `/change-password` | Admin/Host | Change password (forced on first login for invited members) |
+| `/admin-register` | Public | Bootstrap the first admin on a fresh install |
 | `/onboarding` | Admin | First-run city setup |
-| `/admin/dashboard` | Admin | KPIs + recent attendees |
-| `/admin/attendees` | Admin | Manage, search, CSV import |
-| `/admin/coupons` | Admin | Code inventory, bulk import, edit |
-| `/admin/qr-cards` | Admin | Print branded physical cards |
-| `/admin/luma` | Admin | Sync Luma events and dispatch credits |
+| `/admin/dashboard` | Admin/Host | KPIs (incl. check-in), getting-started checklist, low-inventory + passcode banners, recent attendees |
+| `/admin/attendees` | Admin/Host | Event lens + "All people" community lens; edit, reassign, check-in, CSV import/export |
+| `/admin/coupons` | Admin | Shared code pool: bulk import, edit |
+| `/admin/qr-cards` | Admin/Host | Print branded physical cards (city + event name) |
+| `/admin/luma` | Admin/Host | Sync Luma events into the selected event and dispatch credits |
+| `/admin/team` | Admin | Invite co-hosts (admin/host) with one-time passwords |
 | `/admin/settings` | Admin | City, integrations, API keys |
+
+Events are city-scoped: people and the coupon pool persist across events, while
+each event tracks its own registrations, check-ins, and emails. Switch the
+active/selected event from the sidebar event switcher.
+
+**Lost admin password with no email configured?** Run
+`npm run reset-password -- you@email.com` on the server — it prints a temporary
+password and forces a change on next login.
 
 ## Project layout
 

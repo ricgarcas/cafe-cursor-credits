@@ -107,10 +107,35 @@ appropriate status. Never throw across the handler boundary.
   consistency with how the old Supabase API looked. Translate at the edge in
   `rowToDto()`-style helpers.
 
+### Event-centric data model
+
+Three layers: `attendees` = **people** (city-level, one row per email, no
+event fields); `event_attendees` = **participation** (one row per person per
+event — holds coupon, check-in, email status, source); `coupon_codes` = a
+**shared city-level pool** consumed by participations. Public pages and Luma
+dispatch bind to the **active** event (`getActiveEvent()`); admins browse the
+**selected** event (`getSelectedEvent()`, stored in the session). Helpers live
+in `src/lib/db/events.ts` and `src/lib/db/participation.ts`. Legacy
+deployments upgrade in-place via `scripts/migrate-events.mjs`, which runs
+before `db:push` on boot (see `railway.json`).
+
 ### Coupon assignment — race-safe pattern
 
-When claiming/assigning a coupon, use a single `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING *` so two concurrent registrations can't grab the same code. See `/api/claim/route.ts`, `/api/register/route.ts`, and
-`src/lib/luma/sync.ts` (`dispatchLumaCoupons`) for the pattern.
+Use `reserveCouponForParticipation(participationId)` from
+`src/lib/db/participation.ts` — a single `UPDATE … WHERE id = (SELECT … LIMIT 1)
+RETURNING *` against the shared pool so two concurrent claims can't grab the
+same code. Used by `/api/register`, `/api/claim`, `/api/admin/assign-coupon`,
+`/api/admin/attendees/[id]/reassign`, and `dispatchLumaCoupons`.
+
+### Roles
+
+`users.role` is `admin` | `host`. Admin-only API routes pass
+`requireUser({ role: 'admin' })`; hosts get the day-of tools (dashboard,
+attendees, check-in, QR cards, Luma) but not Settings, Team, or coupon
+mutations. The sidebar hides admin-only nav for hosts; the API enforces it
+regardless. New members are created in `/admin/team` with a one-time password
+(`mustChangePassword`). Password recovery is email-based with a
+`npm run reset-password` CLI break-glass.
 
 ### Secrets
 
