@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db/client'
 import { appSettings } from '@/lib/db/schema'
 import { syncLumaGuests, dispatchLumaCoupons } from '@/lib/luma/sync'
+import { getSelectedEvent } from '@/lib/db/events'
 import { requireUser } from '@/lib/auth/guard'
 
 const schema = z.object({
@@ -24,9 +25,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const sync = await syncLumaGuests(settings.lumaApiKey, parsed.data.eventApiId)
+    const localEvent = await getSelectedEvent()
+    const sync = await syncLumaGuests(settings.lumaApiKey, parsed.data.eventApiId, localEvent.id)
     const dispatch = parsed.data.dispatch
-      ? await dispatchLumaCoupons(parsed.data.eventApiId)
+      ? await dispatchLumaCoupons(localEvent.id)
       : null
     return NextResponse.json({ sync, dispatch })
   } catch (e) {

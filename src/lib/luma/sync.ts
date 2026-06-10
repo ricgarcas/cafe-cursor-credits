@@ -1,9 +1,16 @@
 import 'server-only'
 import { eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
-import { lumaEvents, lumaGuests, attendees, couponCodes, appSettings } from '@/lib/db/schema'
+import { lumaEvents, lumaGuests, attendees, couponCodes, appSettings, eventAttendees, events } from '@/lib/db/schema'
 import { listAllEvents, listAllGuests, type LumaGuest } from './client'
 import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
+import {
+  findOrCreatePerson,
+  getParticipation,
+  createParticipation,
+  reserveCouponForParticipation,
+  recordEmailResult,
+} from '@/lib/db/participation'
 
 /**
  * Luma sets `approval_status` only on approval-gated events; open events leave
@@ -62,7 +69,7 @@ export async function refreshLumaEvents(apiKey: string, calendarApiId?: string) 
  *
  * Does NOT assign coupons or send emails — that's `dispatchLumaCoupons`.
  */
-export async function syncLumaGuests(apiKey: string, eventApiId: string) {
+export async function syncLumaGuests(apiKey: string, eventApiId: string, localEventId: number) {
   const { guests: fetched, truncated } = await listAllGuests(apiKey, eventApiId)
   const now = new Date().toISOString()
 
@@ -73,26 +80,28 @@ export async function syncLumaGuests(apiKey: string, eventApiId: string) {
     await upsertGuest(g, eventApiId, now)
     upserted++
 
-    // Mirror confirmed, credit-eligible guests into attendees so the main
-    // dashboard stats include them. Skip waitlist/declined/cancelled and
-    // anyone still pending host approval on gated events.
+    // Mirror confirmed, credit-eligible guests as participations of the local
+    // event. Skip waitlist/declined/cancelled and anyone still pending host
+    // approval on gated events.
     if (g.registration_status === 'confirmed' && isApprovedForCredit(g.approval_status)) {
-      const email = g.email.toLowerCase()
-      const existing = await db
-        .select({ id: attendees.id })
-        .from(attendees)
-        .where(eq(attendees.email, email))
-        .limit(1)
-      if (!existing[0]) {
-        await db.insert(attendees).values({
-          name: g.name,
-          email,
+      const person = await findOrCreatePerson({ name: g.name, email: g.email })
+      let participation = await getParticipation(localEventId, person.id)
+      if (!participation) {
+        participation = await createParticipation({
+          eventId: localEventId,
+          attendeeId: person.id,
           source: 'luma',
           lumaGuestId: g.api_id,
-          lumaEventId: eventApiId,
           registeredAt: g.created_at ?? now,
         })
         mirrored++
+      }
+      // Luma marked them present; never clobber an earlier manual check-in.
+      if (g.attendance_status && !participation.checkedInAt) {
+        await db
+          .update(eventAttendees)
+          .set({ checkedInAt: now, updatedAt: now })
+          .where(eq(eventAttendees.id, participation.id))
       }
     }
   }
@@ -101,6 +110,11 @@ export async function syncLumaGuests(apiKey: string, eventApiId: string) {
     .update(lumaEvents)
     .set({ lastSyncedAt: now, isSyncEnabled: true, updatedAt: now })
     .where(eq(lumaEvents.apiId, eventApiId))
+  // Persist the Luma ↔ local event link so re-syncs and dispatch find it.
+  await db
+    .update(events)
+    .set({ lumaEventApiId: eventApiId, updatedAt: now })
+    .where(eq(events.id, localEventId))
 
   return { upserted, mirrored, truncated }
 }
@@ -133,86 +147,50 @@ async function upsertGuest(g: LumaGuest, eventApiId: string, now: string) {
 }
 
 /**
- * For every confirmed guest, ensure exactly one coupon is assigned and the
- * credit email is sent. Idempotent and retry-safe:
- *   • A guest whose email already holds a coupon (website register, /claim, or
- *     a prior sync) reuses that code — the same person never gets two.
- *   • A guest with a coupon but no email yet is re-attempted, so a failed send
- *     isn't silently dropped.
+ * For every Luma-sourced participation of the local event, ensure a coupon is
+ * assigned and the credit email is sent. Idempotent and retry-safe:
+ *   • person+event resolves to one participation, so a code claimed on the
+ *     website or at /claim is reused — the same person never gets two.
+ *   • a participation whose last send failed (or never ran) is re-attempted.
  * Returns counts for the UI.
  */
-export async function dispatchLumaCoupons(eventApiId: string) {
+export async function dispatchLumaCoupons(localEventId: number) {
   const [settings] = await db.select().from(appSettings).limit(1)
-  const now = new Date().toISOString()
 
-  // Confirmed + credit-eligible (open events, or approved on gated events) that
-  // need a coupon OR need their email sent — the emailSentAt clause makes a
-  // previously failed send retryable instead of stranding the guest.
+  // Luma-sourced participations of this event needing a coupon or a (re)send —
+  // emailStatus != 'sent' keeps failed sends retryable instead of stranded.
   const pending = await db
     .select()
-    .from(lumaGuests)
+    .from(eventAttendees)
+    .innerJoin(attendees, eq(eventAttendees.attendeeId, attendees.id))
     .where(
-      sql`${lumaGuests.eventApiId} = ${eventApiId}
-          AND ${lumaGuests.registrationStatus} = 'confirmed'
-          AND (${lumaGuests.approvalStatus} IS NULL
-               OR ${lumaGuests.approvalStatus} NOT IN ('pending_approval', 'declined'))
-          AND (${lumaGuests.couponCodeId} IS NULL OR ${lumaGuests.emailSentAt} IS NULL)`,
+      sql`${eventAttendees.eventId} = ${localEventId}
+          AND ${eventAttendees.source} = 'luma'
+          AND (${eventAttendees.couponCodeId} IS NULL
+               OR ${eventAttendees.emailStatus} IS NULL
+               OR ${eventAttendees.emailStatus} = 'failed')`,
     )
 
   let assigned = 0
   let emailed = 0
 
-  for (const guest of pending) {
-    let couponId = guest.couponCodeId
+  for (const row of pending) {
+    const participation = row.event_attendees
+    const person = row.attendees
+    let couponId = participation.couponCodeId
 
     if (couponId == null) {
-      // Reserve + link as one unit so a mid-sequence failure can't burn a code
-      // with no owner. Returns null when inventory is exhausted.
-      couponId = await db.transaction(async (tx) => {
-        // Reuse the coupon this email already holds before burning a fresh one.
-        const [prior] = await tx
-          .select({ couponCodeId: attendees.couponCodeId })
-          .from(attendees)
-          .where(eq(attendees.email, guest.email))
-          .limit(1)
-
-        let id = prior?.couponCodeId ?? null
-        if (id == null) {
-          const [coupon] = await tx
-            .update(couponCodes)
-            .set({ isUsed: true, usedAt: now, usedByType: 'luma_guest', updatedAt: now })
-            .where(
-              sql`${couponCodes.id} = (
-                SELECT id FROM ${couponCodes}
-                WHERE ${couponCodes.isUsed} = 0 AND ${couponCodes.usedAt} IS NULL
-                LIMIT 1
-              )`,
-            )
-            .returning()
-          if (!coupon) return null // out of codes
-          id = coupon.id
-        }
-
-        await tx
-          .update(lumaGuests)
-          .set({ couponCodeId: id, updatedAt: now })
-          .where(eq(lumaGuests.id, guest.id))
-
-        // Mirror onto the attendee, but only fill an empty slot — never clobber
-        // a coupon they already hold (that would orphan the old code).
-        await tx
-          .update(attendees)
-          .set({ couponCodeId: id, updatedAt: now })
-          .where(sql`${attendees.email} = ${guest.email} AND ${attendees.couponCodeId} IS NULL`)
-
-        return id
-      })
-
-      if (couponId == null) break // out of codes
+      const coupon = await reserveCouponForParticipation(participation.id)
+      if (!coupon) break // out of codes
+      couponId = coupon.id
       assigned++
     }
 
-    if (guest.emailSentAt == null && canSendEmail(settings)) {
+    if (participation.emailStatus !== 'sent') {
+      if (!canSendEmail(settings)) {
+        await recordEmailResult(participation.id, 'skipped')
+        continue
+      }
       const [coupon] = await db
         .select()
         .from(couponCodes)
@@ -222,17 +200,15 @@ export async function dispatchLumaCoupons(eventApiId: string) {
       try {
         await sendCouponEmail({
           settings,
-          attendee: { name: guest.name, email: guest.email },
+          attendee: { name: person.name, email: person.email },
           couponCode: coupon,
           fromName: `Cafe Cursor ${settings.cityName}`,
         })
-        await db
-          .update(lumaGuests)
-          .set({ emailSentAt: now, updatedAt: now })
-          .where(eq(lumaGuests.id, guest.id))
+        await recordEmailResult(participation.id, 'sent')
         emailed++
       } catch (e) {
-        console.error('resend failed for guest', guest.email, e)
+        console.error('luma dispatch send failed for', person.email, e)
+        await recordEmailResult(participation.id, 'failed', e instanceof Error ? e.message : String(e))
       }
     }
   }
