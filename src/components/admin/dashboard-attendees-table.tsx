@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { AttendeeWithCoupon } from '@/lib/db/schema'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -27,12 +26,21 @@ import { format } from 'date-fns'
 
 type FilterStatus = 'all' | 'with_coupon' | 'without_coupon'
 
+/** Event-lens row — `id` is the participation id. */
+type AttendeeRow = {
+  id: number
+  name: string
+  email: string
+  registered_at: string | null
+  coupon_code: string | null
+}
+
 interface Props {
-  initialAttendees: AttendeeWithCoupon[]
+  initialAttendees: AttendeeRow[]
 }
 
 export function DashboardAttendeesTable({ initialAttendees }: Props) {
-  const [attendees, setAttendees] = useState<AttendeeWithCoupon[]>(initialAttendees)
+  const [attendees, setAttendees] = useState<AttendeeRow[]>(initialAttendees)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all')
   const [loading, setLoading] = useState(false)
@@ -64,12 +72,12 @@ export function DashboardAttendeesTable({ initialAttendees }: Props) {
     }
   }, [search, statusFilter, fetchAttendees, initialAttendees])
 
-  const handleSendEmail = async (attendeeId: number) => {
+  const handleSendEmail = async (participationId: number) => {
     try {
       const res = await fetch('/api/admin/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendeeId }),
+        body: JSON.stringify({ participation_id: participationId }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -82,13 +90,13 @@ export function DashboardAttendeesTable({ initialAttendees }: Props) {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this attendee?')) return
+    if (!confirm('Remove this attendee from the event?')) return
     const res = await fetch(`/api/admin/attendees/${id}`, { method: 'DELETE' })
     if (res.ok) {
-      toast.success('Attendee deleted')
+      toast.success('Removed')
       fetchAttendees()
     } else {
-      toast.error('Failed to delete')
+      toast.error('Failed to remove')
     }
   }
 
@@ -146,24 +154,24 @@ export function DashboardAttendeesTable({ initialAttendees }: Props) {
                     <TableCell className="font-medium">{a.name}</TableCell>
                     <TableCell className="text-muted-foreground">{a.email}</TableCell>
                     <TableCell>
-                      {a.couponCode ? (
+                      {a.coupon_code ? (
                         <Badge variant="secondary" className="font-code text-[11px]">
-                          {a.couponCode.code.slice(0, 20)}
-                          {a.couponCode.code.length > 20 ? '…' : ''}
+                          {a.coupon_code.slice(0, 20)}
+                          {a.coupon_code.length > 20 ? '…' : ''}
                         </Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {a.registeredAt ? format(new Date(a.registeredAt), 'MMM d, HH:mm') : ''}
+                      {a.registered_at ? format(new Date(a.registered_at), 'MMM d, HH:mm') : ''}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         onClick={() => handleSendEmail(a.id)}
-                        disabled={!a.couponCode}
+                        disabled={!a.coupon_code}
                         title="Resend email"
                       >
                         <Send className="size-4" />

@@ -20,9 +20,11 @@ function toRedeemUrl(code: string): string {
 export function QrCardsClient({
   codes,
   city,
+  eventName,
 }: {
   codes: Code[]
   city: string
+  eventName?: string
 }) {
   const { resolvedTheme } = useTheme()
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
@@ -123,10 +125,11 @@ export function QrCardsClient({
           : 'bg-white border-[#E5E1D7] text-[#1a1a1a]')
       }
     >
-      {/* Header — wordmark over the city in a lighter tone */}
+      {/* Header — wordmark over the city + event in a lighter tone */}
       <div className="text-[clamp(10px,5cqw,16px)] leading-tight tracking-[-0.015em]">
         <div className="truncate">Cafe Cursor</div>
         {city ? <div className="truncate opacity-50">{city}</div> : null}
+        {eventName ? <div className="truncate opacity-40">{eventName}</div> : null}
       </div>
 
       {/* QR with the Cursor cube notched into the center */}

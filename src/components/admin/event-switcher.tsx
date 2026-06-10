@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, ChevronsUpDown, Plus, CalendarDays } from 'lucide-react'
 import { toast } from 'sonner'
@@ -32,17 +32,19 @@ export function EventSwitcher({ canManage }: { canManage: boolean }) {
   const [newName, setNewName] = useState('')
   const [newPasscode, setNewPasscode] = useState('')
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const res = await fetch('/api/admin/events')
     if (!res.ok) return
     const data = await res.json()
     setEvents(data.events)
     setSelectedId(data.selected_event_id)
     setActiveId(data.active_event_id)
-  }
-  useEffect(() => {
-    load()
   }, [])
+  useEffect(() => {
+    // load() only setStates after an await — not the synchronous cascade the rule guards.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load()
+  }, [load])
 
   const select = async (id: number) => {
     await fetch('/api/admin/selected-event', {

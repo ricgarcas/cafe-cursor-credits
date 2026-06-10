@@ -1,6 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import { db, ensureDefaultSettings } from '@/lib/db/client'
 import { couponCodes, appSettings } from '@/lib/db/schema'
+import { getSelectedEvent } from '@/lib/db/events'
 import { QrCardsClient } from '@/components/admin/qr-cards-client'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ async function getCity() {
 }
 
 export default async function QrCardsPage() {
-  const [codes, meta] = await Promise.all([getAvailableCodes(), getCity()])
+  const [codes, meta, event] = await Promise.all([getAvailableCodes(), getCity(), getSelectedEvent()])
   return (
     <div className="space-y-8">
       <div>
@@ -32,7 +33,7 @@ export default async function QrCardsPage() {
           contains one unused code — save as PDF from the browser print dialog.
         </p>
       </div>
-      <QrCardsClient codes={codes} city={meta.city} />
+      <QrCardsClient codes={codes} city={meta.city} eventName={event.name} />
     </div>
   )
 }

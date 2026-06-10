@@ -1,44 +1,42 @@
-import { desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
+import { desc, eq, sql } from 'drizzle-orm'
 import { db, ensureDefaultSettings } from '@/lib/db/client'
-import { attendees, couponCodes, appSettings } from '@/lib/db/schema'
+import { attendees, couponCodes, eventAttendees, appSettings } from '@/lib/db/schema'
+import { getSelectedEvent } from '@/lib/db/events'
 import { Card, CardContent } from '@/components/ui/card'
 import { DashboardAttendeesTable } from '@/components/admin/dashboard-attendees-table'
 import { Users, Ticket, Gift, TrendingUp } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
-async function getStats() {
-  const countRows = async (where?: import('drizzle-orm').SQL) => {
-    const q = db.select({ c: sql<number>`count(*)` }).from(attendees)
-    const [row] = await (where ? q.where(where) : q)
-    return Number(row?.c ?? 0)
-  }
-  const countCoupons = async (where?: import('drizzle-orm').SQL) => {
-    const q = db.select({ c: sql<number>`count(*)` }).from(couponCodes)
-    const [row] = await (where ? q.where(where) : q)
-    return Number(row?.c ?? 0)
-  }
-  const [totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal] =
-    await Promise.all([
-      countRows(),
-      countRows(isNotNull(attendees.couponCodeId)),
-      countCoupons(eq(couponCodes.isUsed, false)),
-      countCoupons(),
-    ])
-  void isNull
+async function getStats(eventId: number) {
+  const one = async (q: Promise<{ c: number }[]>) => Number((await q)[0]?.c ?? 0)
+  const [totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal] = await Promise.all([
+    one(db.select({ c: sql<number>`count(*)` }).from(eventAttendees).where(eq(eventAttendees.eventId, eventId))),
+    one(
+      db.select({ c: sql<number>`count(*)` }).from(eventAttendees)
+        .where(sql`${eventAttendees.eventId} = ${eventId} AND ${eventAttendees.couponCodeId} IS NOT NULL`),
+    ),
+    one(db.select({ c: sql<number>`count(*)` }).from(couponCodes).where(eq(couponCodes.isUsed, false))),
+    one(db.select({ c: sql<number>`count(*)` }).from(couponCodes)),
+  ])
   return { totalRegistrations, couponsDistributed, couponsRemaining, couponsTotal }
 }
 
-async function getRecentAttendees() {
+async function getRecentAttendees(eventId: number) {
   const rows = await db
     .select()
-    .from(attendees)
-    .leftJoin(couponCodes, eq(attendees.couponCodeId, couponCodes.id))
-    .orderBy(desc(attendees.registeredAt))
+    .from(eventAttendees)
+    .innerJoin(attendees, eq(eventAttendees.attendeeId, attendees.id))
+    .leftJoin(couponCodes, eq(eventAttendees.couponCodeId, couponCodes.id))
+    .where(eq(eventAttendees.eventId, eventId))
+    .orderBy(desc(eventAttendees.registeredAt))
     .limit(10)
   return rows.map((r) => ({
-    ...r.attendees,
-    couponCode: r.coupon_codes,
+    id: r.event_attendees.id,
+    name: r.attendees.name,
+    email: r.attendees.email,
+    registered_at: r.event_attendees.registeredAt,
+    coupon_code: r.coupon_codes?.code ?? null,
   }))
 }
 
@@ -91,9 +89,10 @@ function Kpi({
 }
 
 export default async function DashboardPage() {
+  const event = await getSelectedEvent()
   const [stats, recentAttendees, city] = await Promise.all([
-    getStats(),
-    getRecentAttendees(),
+    getStats(event.id),
+    getRecentAttendees(event.id),
     getCity(),
   ])
 
@@ -107,7 +106,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="font-display text-3xl tracking-tight">Dashboard</h1>
         <p className="mt-1 text-muted-foreground">
-          Cafe Cursor <span className="font-tagline">{city}</span> — live view.
+          Cafe Cursor <span className="font-tagline">{city}</span> — {event.name}
         </p>
       </div>
 
