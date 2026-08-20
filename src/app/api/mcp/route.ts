@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { apiKeyOwnerEmail, requireApiKey } from '@/lib/auth/api-key'
 import { registerReadTools } from '@/lib/mcp/tools-read'
 import { registerSetupTools } from '@/lib/mcp/tools-setup'
+import { registerOpsTools } from '@/lib/mcp/tools-ops'
 import type { ToolServer } from '@/lib/mcp/server-types'
 
 // Bulk dispatch outlives default serverless timeouts.
@@ -13,6 +14,7 @@ function buildHandler(ownerEmail: string) {
     const s = server as unknown as ToolServer
     registerReadTools(s)
     registerSetupTools(s, ownerEmail)
+    registerOpsTools(s)
   })
 }
 
