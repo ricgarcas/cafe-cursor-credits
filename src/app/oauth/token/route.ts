@@ -3,7 +3,7 @@ import { findClient, parseGrantTypes, touchClient, verifyClientSecret } from '@/
 import { consumeAuthCode } from '@/lib/oauth/codes'
 import { canonicalResource, parseScopes, resourceMatches } from '@/lib/oauth/config'
 import { issueTokens, refreshTokens } from '@/lib/oauth/tokens'
-import { clientIp, rateLimit, tooManyRequests } from '@/lib/rate-limit'
+import { clientIp, rateLimit, tooManyRequests, OAUTH_WINDOWS } from '@/lib/rate-limit'
 
 const fail = (error: string, description: string, status = 400) =>
   NextResponse.json({ error, error_description: description }, { status })
@@ -28,7 +28,7 @@ function clientCredentials(request: Request, form: URLSearchParams) {
 }
 
 export async function POST(request: Request) {
-  if (!rateLimit(`token:${clientIp(request)}`)) return tooManyRequests()
+  if (!rateLimit(`token:${clientIp(request)}`, Date.now(), OAUTH_WINDOWS)) return tooManyRequests()
 
   const form = new URLSearchParams(await request.text())
   const grantType = form.get('grant_type') ?? ''

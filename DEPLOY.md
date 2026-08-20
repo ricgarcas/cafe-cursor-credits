@@ -143,3 +143,34 @@ Like the rate limiter, the MCP dry-run/confirm tokens live in process memory.
 On a multi-instance deployment a confirm call can land on an instance that
 never issued the token, and will be rejected as unknown. Run a single
 instance, or move both stores to a shared cache before scaling out.
+
+### OAuth: set `PUBLIC_URL` behind a proxy that strips forwarding headers
+
+Every OAuth token is bound to the canonical MCP URI it was minted for, and
+that URI is derived from `X-Forwarded-Host` / `X-Forwarded-Proto`. Vercel,
+Fly and a default nginx all set those, so nothing is needed.
+
+If your proxy strips them, the app sees its internal hostname, mints tokens
+for `http://localhost:3000/api/mcp`, and then rejects them — a confusing
+"token was not issued for this server" on every call. Set the public origin
+explicitly:
+
+```bash
+PUBLIC_URL=https://cafecursor.yourcity.dev
+```
+
+The same value appears in the discovery documents, so getting it wrong also
+sends Cursor to the wrong authorization endpoint. Check it with:
+
+```bash
+curl https://your-deployment/.well-known/oauth-protected-resource/api/mcp
+```
+
+`resource` and `authorization_servers` must both show your public URL.
+
+### OAuth tokens survive restarts; confirm tokens do not
+
+Unlike the rate limiter and the dry-run confirm tokens, OAuth clients, codes
+and tokens live in the database. A restart or a second instance will not log
+Cursor out. The single-instance constraint above applies only to the confirm
+handshake.

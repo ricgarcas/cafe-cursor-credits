@@ -23,6 +23,15 @@ export const MCP_WINDOWS: RateWindow[] = [
   { limit: 600, windowMs: 3_600_000 },
 ]
 
+// Token exchange, hourly refreshes and retries all land here, and a venue NAT
+// puts every organizer on one IP — 5/min locks out real use. The secrets being
+// guarded are 256-bit, so brute force is not what this limit is for; it exists
+// to bound a misbehaving client.
+export const OAUTH_WINDOWS: RateWindow[] = [
+  { limit: 30, windowMs: 60_000 },
+  { limit: 300, windowMs: 3_600_000 },
+]
+
 const hits = new Map<string, number[]>()
 
 export function rateLimit(key: string, now = Date.now(), windows: RateWindow[] = DEFAULT_WINDOWS): boolean {

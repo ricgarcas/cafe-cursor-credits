@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { rateLimit, resetRateLimits, clientIp, VENUE_WINDOWS, MCP_WINDOWS } from './rate-limit'
+import {
+  rateLimit,
+  resetRateLimits,
+  clientIp,
+  VENUE_WINDOWS,
+  MCP_WINDOWS,
+  OAUTH_WINDOWS,
+} from './rate-limit'
 
 describe('rateLimit', () => {
   beforeEach(() => resetRateLimits())
@@ -78,5 +85,29 @@ describe('MCP windows', () => {
       if (rateLimit('mcp:cck_live_abcd', t0 + i * 50, MCP_WINDOWS)) allowed++
     }
     expect(allowed).toBe(60)
+  })
+})
+
+describe('OAUTH_WINDOWS', () => {
+  it('survives a token exchange plus a burst of refreshes from one IP', () => {
+    resetRateLimits()
+    const now = Date.now()
+    // 5/min (the default) would 429 partway through; a venue NAT makes this
+    // the normal case, not an abusive one.
+    for (let i = 0; i < 30; i++) {
+      expect(rateLimit('token:1.2.3.4', now, OAUTH_WINDOWS)).toBe(true)
+    }
+    expect(rateLimit('token:1.2.3.4', now, OAUTH_WINDOWS)).toBe(false)
+  })
+
+  it('still bounds a runaway client within the hour', () => {
+    resetRateLimits()
+    const start = Date.now()
+    let allowed = 0
+    for (let i = 0; i < 400; i++) {
+      // Spread across the hour so the per-minute window never binds.
+      if (rateLimit('token:5.6.7.8', start + i * 9_000, OAUTH_WINDOWS)) allowed++
+    }
+    expect(allowed).toBe(300)
   })
 })

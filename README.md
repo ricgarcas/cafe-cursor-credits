@@ -22,25 +22,49 @@ cards, sync Luma guest lists, and email codes in bulk.
 This deployment ships its own MCP server, so an ambassador can set up and
 run an event by describing what they want.
 
-1. Admin → Settings → **API keys** → New key. Copy it (shown once).
-2. Add to `~/.cursor/mcp.json`:
+Add it to `~/.cursor/mcp.json` — no key to copy:
 
 ```json
 {
   "mcpServers": {
     "cafe-cursor": {
-      "url": "https://your-deployment.example.com/api/mcp",
-      "headers": { "Authorization": "Bearer cck_live_..." }
+      "url": "https://your-deployment.example.com/api/mcp"
     }
   }
 }
 ```
+
+Click **Connect** in Cursor. It opens your deployment's own sign-in page,
+you log in with your **admin account** — the same email and password as the
+dashboard — and approve the permissions. That is the whole setup.
+
+There is no "Sign in with Cursor" here and no cursor.com account involved:
+this deployment is its own authorization server, and the token it issues is
+tied to your admin user row. Revoke it any time under
+**Settings → Connections**, and that Cursor install stops working
+immediately.
 
 Then, in Cursor:
 
 > "Set up Cafe Cursor Bogotá for Sept 12, import these 80 codes, and tell me if I'm ready."
 
 > "Sync Luma and email everyone their code."
+
+### Scripts and CI
+
+Cron and CI have no browser, so they use a machine client instead:
+**Settings → Connections → New machine client**, then exchange the secret
+for a token.
+
+```bash
+curl -X POST https://your-deployment.example.com/oauth/token \
+  -d grant_type=client_credentials \
+  -d client_id=cc_client_... \
+  -d client_secret=cc_secret_...
+```
+
+Machine clients are scoped like any other connection — give a nightly sync
+read access only, and it cannot email anyone.
 
 Tools that send email or burn codes always show a dry-run projection first
 and require you to confirm before anything irreversible happens.

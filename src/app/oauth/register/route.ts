@@ -19,6 +19,9 @@ const schema = z.object({
  * after 24h, so an open endpoint cannot accumulate junk indefinitely.
  */
 export async function POST(request: Request) {
+  // Deliberately the tight default rather than OAUTH_WINDOWS: this is the one
+  // unauthenticated endpoint that creates rows, and a real client registers
+  // once, not repeatedly.
   if (!rateLimit(`dcr:${clientIp(request)}`)) return tooManyRequests()
 
   const body = await request.json().catch(() => null)

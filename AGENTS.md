@@ -213,6 +213,16 @@ dev, swap to a verified sender in production.
   (`/api/register`, `/api/claim`, `/api/settings/public`) are the only
   exceptions and they're clearly documented.
 - ❌ **Don't open the DB at module scope** — use `db` (lazy proxy) inside handlers.
+- ❌ **Don't read the session cookie from MCP code.** An agent has no cookie.
+  Use `getActiveEvent()`, never `getSelectedEvent()`, and take identity from
+  the OAuth token's `userId`.
+- ❌ **Don't add a read-only MCP tool by adding it to `READ_TOOLS` casually.**
+  `scopeForTool` treats anything not on that list as write, which is the safe
+  default — moving a tool onto the list makes it callable by a read-only token.
+- ❌ **Don't compare a SQLite `CURRENT_TIMESTAMP` column against an ISO
+  string.** `"YYYY-MM-DD HH:MM:SS"` vs `"...T...Z"` diverge at index 10, where
+  `" "` sorts before `"T"`, so same-day rows compare backwards. Write the
+  cutoff in the column's own format.
 - ❌ **Don't call a route handler from an MCP tool.** Tool handlers import
   from `src/lib/**` directly. If a route holds logic a tool needs, extract
   it to `src/lib` first.

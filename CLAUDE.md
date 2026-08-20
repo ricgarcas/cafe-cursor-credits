@@ -56,6 +56,8 @@ collect-page-data.
 | Send email | `src/lib/emails/send-coupon-email.ts` — copy the shape |
 | Touch Luma | `src/lib/luma/client.ts` + `src/lib/luma/sync.ts` |
 | Add an MCP tool | `src/lib/mcp/tools-*.ts`, register in `src/app/api/mcp/route.ts` |
+| Change MCP auth | `src/lib/oauth/guard.ts` — the only seam; tools are unaware |
+| Add an OAuth scope | `src/lib/oauth/config.ts` (`SUPPORTED_SCOPES`, `READ_TOOLS`) |
 
 ## Aesthetic cheat sheet
 

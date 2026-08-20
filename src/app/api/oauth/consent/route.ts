@@ -4,7 +4,7 @@ import { checkAuthorizeRequest, buildRedirect } from '@/lib/oauth/authorize'
 import { publicOrigin } from '@/lib/oauth/config'
 import { issueAuthCode } from '@/lib/oauth/codes'
 import { touchClient } from '@/lib/oauth/clients'
-import { clientIp, rateLimit, tooManyRequests } from '@/lib/rate-limit'
+import { clientIp, rateLimit, tooManyRequests, OAUTH_WINDOWS } from '@/lib/rate-limit'
 
 /**
  * The approval step. Re-validates the whole authorize request rather than
@@ -12,7 +12,7 @@ import { clientIp, rateLimit, tooManyRequests } from '@/lib/rate-limit'
  * user could have edited it between the consent screen and this handler.
  */
 export async function POST(request: Request) {
-  if (!rateLimit(`consent:${clientIp(request)}`)) return tooManyRequests()
+  if (!rateLimit(`consent:${clientIp(request)}`, Date.now(), OAUTH_WINDOWS)) return tooManyRequests()
 
   const url = new URL(request.url)
   const params = url.searchParams
