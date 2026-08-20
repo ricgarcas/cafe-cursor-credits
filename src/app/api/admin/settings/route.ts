@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { db, ensureDefaultSettings } from '@/lib/db/client'
-import { appSettings } from '@/lib/db/schema'
+import { appSettings, events } from '@/lib/db/schema'
 import { requireUser } from '@/lib/auth/guard'
+import { adoptCityIntoGenericEvents, getSelectedEvent } from '@/lib/db/events'
 import { maskSecret, isUnchanged } from '@/lib/secrets'
 
 const schema = z.object({
@@ -11,8 +12,9 @@ const schema = z.object({
   timezone: z.string().min(1).max(100),
   country: z.string().max(100).nullable().optional(),
   language: z.string().min(2).max(10).optional(),
-  brand_accent: z.enum(['orange', 'green', 'violet', 'blue']).optional(),
   event_tagline: z.string().max(255).nullable().optional(),
+  // Lives on the selected event, not the settings singleton.
+  event_date: z.string().max(64).nullable().optional(),
   onboarded: z.boolean().optional(),
   claim_enabled: z.boolean().optional(),
 
@@ -37,7 +39,6 @@ function rowToDto(row: typeof appSettings.$inferSelect) {
     country: row.country,
     timezone: row.timezone,
     language: row.language,
-    brand_accent: row.brandAccent,
     event_tagline: row.eventTagline,
     onboarded: row.onboarded,
     claim_enabled: row.claimEnabled,
@@ -69,6 +70,7 @@ export async function GET() {
   const gate = await requireUser({ role: 'admin' })
   if ('response' in gate) return gate.response
   await ensureDefaultSettings()
+  const selectedEvent = await getSelectedEvent()
   const [row] = await db.select().from(appSettings).limit(1)
   if (!row) {
     return NextResponse.json({
@@ -76,7 +78,6 @@ export async function GET() {
       city_name: 'Cafe Cursor',
       timezone: 'America/Mexico_City',
       language: 'en',
-      brand_accent: 'orange',
       onboarded: false,
       claim_enabled: true,
       country: null,
@@ -99,9 +100,15 @@ export async function GET() {
       luma_api_key_set: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      event_date: selectedEvent.eventDate,
+      event_name: selectedEvent.name,
     })
   }
-  return NextResponse.json(rowToDto(row))
+  return NextResponse.json({
+    ...rowToDto(row),
+    event_date: selectedEvent.eventDate,
+    event_name: selectedEvent.name,
+  })
 }
 
 export async function PUT(request: NextRequest) {
@@ -117,6 +124,15 @@ export async function PUT(request: NextRequest) {
   }
 
   await ensureDefaultSettings()
+
+  if (parsed.data.event_date !== undefined) {
+    const selectedEvent = await getSelectedEvent()
+    await db
+      .update(events)
+      .set({ eventDate: parsed.data.event_date || null, updatedAt: new Date().toISOString() })
+      .where(eq(events.id, selectedEvent.id))
+  }
+
   const [existing] = await db.select().from(appSettings).limit(1)
 
   const update: Partial<typeof appSettings.$inferInsert> = {
@@ -126,7 +142,6 @@ export async function PUT(request: NextRequest) {
   }
   if (parsed.data.country !== undefined) update.country = parsed.data.country
   if (parsed.data.language !== undefined) update.language = parsed.data.language
-  if (parsed.data.brand_accent !== undefined) update.brandAccent = parsed.data.brand_accent
   if (parsed.data.event_tagline !== undefined) update.eventTagline = parsed.data.event_tagline
   if (parsed.data.onboarded !== undefined) update.onboarded = parsed.data.onboarded
   if (parsed.data.claim_enabled !== undefined) update.claimEnabled = parsed.data.claim_enabled
@@ -153,6 +168,7 @@ export async function PUT(request: NextRequest) {
 
   if (!existing) {
     const [row] = await db.insert(appSettings).values(update).returning()
+    await adoptCityIntoGenericEvents(row.cityName)
     return NextResponse.json(rowToDto(row))
   }
   const [row] = await db
@@ -160,5 +176,6 @@ export async function PUT(request: NextRequest) {
     .set(update)
     .where(eq(appSettings.id, existing.id))
     .returning()
+  await adoptCityIntoGenericEvents(row.cityName)
   return NextResponse.json(rowToDto(row))
 }

@@ -15,21 +15,31 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { eventDayLabel, formatEventDate, suggestEventName } from '@/lib/event-date'
+import { DateField } from '@/components/ui/date-field'
 
 type EventRow = {
   id: number
   name: string
+  event_date: string | null
   status: 'draft' | 'active' | 'archived'
   attendee_count: number
 }
 
-export function EventSwitcher({ canManage }: { canManage: boolean }) {
+/** Never render a bare "Cafe Cursor" — fall back to the city for context. */
+function label(name: string, city?: string) {
+  if (name.trim().toLowerCase() !== 'cafe cursor') return name
+  return city ? `Cafe Cursor ${city}` : name
+}
+
+export function EventSwitcher({ canManage, city }: { canManage: boolean; city?: string }) {
   const router = useRouter()
   const [events, setEvents] = useState<EventRow[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newDate, setNewDate] = useState('')
   const [newPasscode, setNewPasscode] = useState('')
 
   const load = useCallback(async () => {
@@ -60,7 +70,11 @@ export function EventSwitcher({ canManage }: { canManage: boolean }) {
     const res = await fetch('/api/admin/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName, claim_passcode: newPasscode || undefined }),
+      body: JSON.stringify({
+        name: newName,
+        event_date: newDate || undefined,
+        claim_passcode: newPasscode || undefined,
+      }),
     })
     if (!res.ok) {
       toast.error('Could not create event')
@@ -69,6 +83,7 @@ export function EventSwitcher({ canManage }: { canManage: boolean }) {
     const data = await res.json()
     setCreateOpen(false)
     setNewName('')
+    setNewDate('')
     setNewPasscode('')
     await load()
     await select(data.id)
@@ -81,10 +96,23 @@ export function EventSwitcher({ canManage }: { canManage: boolean }) {
     <div className="px-3 pt-3">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" shape="rounded" className="w-full justify-between gap-2 h-9 px-3 border border-sidebar-border">
+          <Button
+            variant="ghost"
+            shape="rounded"
+            className="w-full justify-between gap-2 h-auto min-h-11 py-2 px-3 border border-sidebar-border"
+          >
             <span className="flex items-center gap-2 min-w-0">
               <CalendarDays className="size-4 shrink-0" />
-              <span className="truncate text-sm">{selected?.name ?? 'Event'}</span>
+              <span className="flex min-w-0 flex-col items-start gap-0.5">
+                <span className="truncate text-sm leading-none">
+                  {selected ? label(selected.name, city) : 'Event'}
+                </span>
+                {selected?.event_date ? (
+                  <span className="truncate text-[11px] leading-none text-sidebar-foreground/60">
+                    {formatEventDate(selected.event_date)}
+                  </span>
+                ) : null}
+              </span>
             </span>
             <ChevronsUpDown className="size-3.5 shrink-0 text-sidebar-foreground/50" />
           </Button>
@@ -92,18 +120,32 @@ export function EventSwitcher({ canManage }: { canManage: boolean }) {
         <DropdownMenuContent className="w-60" align="start">
           <DropdownMenuLabel className="text-xs text-muted-foreground">Events</DropdownMenuLabel>
           {events.map((e) => (
-            <DropdownMenuItem key={e.id} onClick={() => select(e.id)} className="cursor-pointer gap-2">
-              <Check className={cn('size-4', e.id === selectedId ? 'opacity-100' : 'opacity-0')} />
-              <span className="flex-1 truncate">{e.name}</span>
+            <DropdownMenuItem key={e.id} onClick={() => select(e.id)} className="cursor-pointer gap-2 py-2">
+              <Check className={cn('size-4 shrink-0', e.id === selectedId ? 'opacity-100' : 'opacity-0')} />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate leading-none">{label(e.name, city)}</span>
+                <span className="truncate text-[11px] leading-none text-muted-foreground">
+                  {formatEventDate(e.event_date) ?? 'No date set'}
+                  {eventDayLabel(e.event_date) ? ` · ${eventDayLabel(e.event_date)}` : ''}
+                  {` · ${e.attendee_count} ${e.attendee_count === 1 ? 'guest' : 'guests'}`}
+                </span>
+              </span>
               {e.id === activeId && (
-                <span className="text-[10px] uppercase tracking-wider text-[color:var(--brand-green)]">live</span>
+                <span className="shrink-0 text-[10px] uppercase tracking-wider text-[color:var(--brand-green)]">live</span>
               )}
             </DropdownMenuItem>
           ))}
           {canManage && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={(ev) => { ev.preventDefault(); setCreateOpen(true) }} className="cursor-pointer gap-2">
+              <DropdownMenuItem
+                onSelect={(ev) => {
+                  ev.preventDefault()
+                  if (!newName) setNewName(suggestEventName(city))
+                  setCreateOpen(true)
+                }}
+                className="cursor-pointer gap-2"
+              >
                 <Plus className="size-4" /> New event
               </DropdownMenuItem>
             </>
@@ -117,7 +159,14 @@ export function EventSwitcher({ canManage }: { canManage: boolean }) {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="event-name">Event name</Label>
-              <Input id="event-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Cafe Cursor — July" />
+              <Input id="event-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={city ? `Cafe Cursor ${city} — July` : 'Cafe Cursor — July'} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="event-date">Date</Label>
+              <DateField id="event-date" value={newDate} onChange={setNewDate} />
+              <p className="text-xs text-muted-foreground">
+                What separates one edition from the next in the switcher.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="event-passcode">Claim passcode</Label>

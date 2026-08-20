@@ -15,6 +15,7 @@ import { Loader2, Save, Check, ChevronsUpDown, Eye, EyeOff, Pencil, Lock, MapPin
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { UNCHANGED } from '@/lib/secrets'
+import { DateField } from '@/components/ui/date-field'
 
 // Canonical timezone list — no duplicates, Mexico City first.
 const TIMEZONES = [
@@ -49,6 +50,7 @@ const schema = z.object({
   timezone: z.string().min(1),
   language: z.string().min(2).max(10),
   event_tagline: z.string().max(255).nullable().optional(),
+  event_date: z.string().max(64).nullable().optional(),
   claim_enabled: z.boolean(),
   email_provider: z.enum(['resend', 'smtp']),
   resend_api_key: z.string().nullable().optional(),
@@ -74,6 +76,21 @@ type SectionId = (typeof SECTIONS)[number]['id']
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+
+  const sendTest = async () => {
+    setTesting(true)
+    try {
+      const res = await fetch('/api/admin/send-test-email', { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Send failed')
+      toast.success(`Test email sent to ${json.to}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Send failed')
+    } finally {
+      setTesting(false)
+    }
+  }
   const [tzOpen, setTzOpen] = useState(false)
   const [section, setSection] = useState<SectionId>('general')
 
@@ -85,6 +102,7 @@ export default function SettingsPage() {
       timezone: 'America/Mexico_City',
       language: 'en',
       event_tagline: '',
+      event_date: '',
       claim_enabled: true,
       email_provider: 'resend',
       resend_api_key: '',
@@ -109,6 +127,7 @@ export default function SettingsPage() {
           timezone: s.timezone ?? 'America/Mexico_City',
           language: s.language ?? 'en',
           event_tagline: s.event_tagline ?? '',
+          event_date: s.event_date ?? '',
           claim_enabled: s.claim_enabled ?? true,
           email_provider: s.email_provider ?? 'resend',
           // Secrets: if set, seed with sentinel so the form knows not to overwrite.
@@ -300,6 +319,28 @@ export default function SettingsPage() {
                         </Command>
                       </PopoverContent>
                     </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="event_date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Event date</FormLabel>
+                    <FormControl>
+                      <DateField
+                        id="event-date"
+                        value={field.value ?? ''}
+                        onChange={field.onChange}
+                        placeholder="Pick the date of this edition"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Applies to the event selected in the sidebar — what tells
+                      one Cafe Cursor edition from the next.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -538,6 +579,19 @@ export default function SettingsPage() {
                   />
                 </>
               )}
+
+              <div className="flex items-center justify-between gap-4 rounded-[12px] border border-border px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Test your setup</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Sends a test message to your own email using the saved settings.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={sendTest} disabled={testing}>
+                  {testing ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+                  Send test
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

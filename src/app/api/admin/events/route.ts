@@ -24,7 +24,8 @@ export async function GET() {
         attendee_count: sql<number>`(SELECT count(*) FROM ${eventAttendees} WHERE ${eventAttendees.eventId} = ${events.id})`,
       })
       .from(events)
-      .orderBy(desc(events.createdAt), desc(events.id)),
+      // Dated editions first, newest first; undated ones fall to the bottom.
+      .orderBy(sql`${events.eventDate} IS NULL`, desc(events.eventDate), desc(events.createdAt)),
   ])
   return NextResponse.json({ events: rows, active_event_id: active.id, selected_event_id: selected.id })
 }

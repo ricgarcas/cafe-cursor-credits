@@ -4,15 +4,42 @@ import { db, ensureDefaultSettings } from './client'
 import { getSession } from '@/lib/auth/session'
 import { appSettings, events, type Event } from './schema'
 
+/** A name that carries no city — "Cafe Cursor" alone tells an organizer nothing. */
+export function isGenericEventName(name: string): boolean {
+  return name.trim().toLowerCase() === 'cafe cursor'
+}
+
+/** The name a default event should carry for a given city. */
+export function defaultEventName(city: string | null | undefined): string {
+  const c = (city ?? '').trim()
+  if (!c || isGenericEventName(c)) return 'Cafe Cursor'
+  return c.toLowerCase().startsWith('cafe cursor') ? c : `Cafe Cursor ${c}`
+}
+
+/**
+ * The bootstrap event is created before onboarding knows the city, so it lands
+ * as plain "Cafe Cursor". Once a city exists, adopt it — otherwise the event
+ * switcher shows "Cafe Cursor" forever with no way to tell editions apart.
+ */
+export async function adoptCityIntoGenericEvents(city: string): Promise<void> {
+  const name = defaultEventName(city)
+  if (isGenericEventName(name)) return
+  const rows = await db.select().from(events)
+  const now = new Date().toISOString()
+  for (const row of rows) {
+    if (!isGenericEventName(row.name)) continue
+    await db.update(events).set({ name, updatedAt: now }).where(eq(events.id, row.id))
+  }
+}
+
 /** Ensure at least one event exists. Mirrors ensureDefaultSettings(). Idempotent. */
 export async function ensureDefaultEvent(): Promise<void> {
   const existing = await db.select({ id: events.id }).from(events).limit(1)
   if (existing.length > 0) return
   await ensureDefaultSettings()
   const [settings] = await db.select().from(appSettings).limit(1)
-  const city = settings?.cityName ?? 'Cafe Cursor'
   await db.insert(events).values({
-    name: city.startsWith('Cafe Cursor') ? city : `Cafe Cursor ${city}`,
+    name: defaultEventName(settings?.cityName),
     status: 'active',
   })
 }
