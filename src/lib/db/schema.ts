@@ -31,6 +31,33 @@ export const users = sqliteTable(
 )
 
 /**
+ * Bearer credentials for the MCP server. Agents can't hold a session cookie,
+ * so keys are the parallel auth path. Only the bcrypt hash is stored.
+ */
+export const apiKeys = sqliteTable(
+  'api_keys',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    keyHash: text('key_hash').notNull(),
+    keyPrefix: text('key_prefix').notNull(),
+    role: text('role', { enum: ['admin', 'host'] }).notNull().default('admin'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    lastUsedAt: text('last_used_at'),
+    revokedAt: text('revoked_at'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (t) => ({
+    prefixIdx: index('api_keys_prefix_idx').on(t.keyPrefix),
+  }),
+)
+
+export type ApiKey = typeof apiKeys.$inferSelect
+export type NewApiKey = typeof apiKeys.$inferInsert
+
+/**
  * Inventory of Cursor credit codes the organizer has been given. Each code is
  * assigned to at most one attendee (or Luma guest) and marked used once handed out.
  */
