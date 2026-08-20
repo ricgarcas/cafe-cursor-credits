@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { Search, Send, Ticket, Trash2, Download, Check, Pencil, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
+import { csvCell } from '@/lib/csv'
 
 type FilterStatus = 'all' | 'with_coupon' | 'without_coupon'
 
@@ -72,20 +73,25 @@ export function AttendeeManagement() {
   const [editEmail, setEditEmail] = useState('')
   const itemsPerPage = 9
 
+  // Monotonic sequence — a slow stale response must not clobber a newer one.
+  const fetchSeq = useRef(0)
   const fetchAttendees = useCallback(async () => {
+    const seq = ++fetchSeq.current
     setLoading(true)
     const params = new URLSearchParams()
     if (search) params.set('search', search)
     if (statusFilter !== 'all') params.set('status', statusFilter)
+    params.set('limit', '1000')
     try {
       const res = await fetch(`/api/admin/attendees?${params.toString()}`)
       const json = await res.json()
+      if (seq !== fetchSeq.current) return
       setAttendees(json.attendees ?? [])
       setCurrentPage(1)
     } catch {
-      toast.error('Failed to load attendees')
+      if (seq === fetchSeq.current) toast.error('Failed to load attendees')
     } finally {
-      setLoading(false)
+      if (seq === fetchSeq.current) setLoading(false)
     }
   }, [search, statusFilter])
 
@@ -103,9 +109,14 @@ export function AttendeeManagement() {
   }, [])
 
   useEffect(() => {
-    if (view === 'people') fetchPeople()
-    else fetchAttendees()
-  }, [view, fetchAttendees, fetchPeople])
+    if (view === 'people') {
+      fetchPeople()
+      return
+    }
+    // Debounced — typing shouldn't fire a request per keystroke.
+    const t = setTimeout(fetchAttendees, search ? 250 : 0)
+    return () => clearTimeout(t)
+  }, [view, search, fetchAttendees, fetchPeople])
 
   const stats = useMemo(() => {
     const withCoupons = attendees.filter((a) => a.coupon_code).length
@@ -225,9 +236,7 @@ export function AttendeeManagement() {
   const exportPeopleCsv = () => {
     const headers = ['Name', 'Email', 'Events attended', 'First seen', 'Last seen']
     const rows = people.map((p) => [p.name, p.email, p.events_attended, p.first_seen, p.last_seen])
-    const csv = [headers, ...rows]
-      .map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
-      .join('\n')
+    const csv = [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -246,9 +255,7 @@ export function AttendeeManagement() {
       a.coupon_code ?? '',
       a.source,
     ])
-    const csv = [headers, ...rows]
-      .map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
-      .join('\n')
+    const csv = [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -440,6 +447,11 @@ export function AttendeeManagement() {
                 ))}
               </TableBody>
             </Table>
+            {attendees.length >= 1000 && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Showing the first 1000 — narrow your search to see the rest.
+              </p>
+            )}
             {totalPages > 1 && (
               <div className="mt-4 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
@@ -500,13 +512,22 @@ export function AttendeeManagement() {
 
 function EmailStatusDot({ status, error }: { status: string | null; error: string | null }) {
   if (!status) return null
-  const tone =
-    status === 'sent'
-      ? 'bg-[color:var(--brand-green)]'
-      : status === 'failed'
-        ? 'bg-foreground'
-        : 'bg-muted-foreground/40'
-  const label = status === 'failed' ? `Email failed: ${error ?? 'unknown'}` : `Email ${status}`
+  if (status === 'failed') {
+    // Failed sends are the one state an organizer must catch — make it loud.
+    const label = `Email failed: ${error ?? 'unknown'}`
+    return (
+      <Badge
+        variant="outline"
+        title={label}
+        aria-label={label}
+        className="border-destructive/40 text-destructive text-[10px] uppercase tracking-wider"
+      >
+        email failed
+      </Badge>
+    )
+  }
+  const tone = status === 'sent' ? 'bg-[color:var(--brand-green)]' : 'bg-muted-foreground/40'
+  const label = `Email ${status}`
   return <span title={label} aria-label={label} className={`inline-block size-1.5 rounded-full ${tone}`} />
 }
 
@@ -521,7 +542,6 @@ function StatCard({
 }) {
   return (
     <Card className="relative overflow-hidden">
-      <div className="absolute inset-0 bg-dotted opacity-60 pointer-events-none" aria-hidden />
       <CardContent className="relative flex flex-col gap-2 py-1">
         <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
           {label}

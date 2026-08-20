@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -47,7 +47,9 @@ export function DashboardAttendeesTable({ initialAttendees }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 9
 
+  const fetchSeq = useRef(0)
   const fetchAttendees = useCallback(async () => {
+    const seq = ++fetchSeq.current
     setLoading(true)
     const params = new URLSearchParams()
     if (search) params.set('search', search)
@@ -55,21 +57,23 @@ export function DashboardAttendeesTable({ initialAttendees }: Props) {
     try {
       const res = await fetch(`/api/admin/attendees?${params.toString()}`)
       const json = await res.json()
+      if (seq !== fetchSeq.current) return
       setAttendees(json.attendees ?? [])
       setCurrentPage(1)
     } catch {
-      toast.error('Failed to load attendees')
+      if (seq === fetchSeq.current) toast.error('Failed to load attendees')
     } finally {
-      setLoading(false)
+      if (seq === fetchSeq.current) setLoading(false)
     }
   }, [search, statusFilter])
 
   useEffect(() => {
     if (search || statusFilter !== 'all') {
-      fetchAttendees()
-    } else {
-      setAttendees(initialAttendees)
+      const t = setTimeout(fetchAttendees, search ? 250 : 0)
+      return () => clearTimeout(t)
     }
+    fetchSeq.current++ // invalidate any in-flight search response
+    setAttendees(initialAttendees)
   }, [search, statusFilter, fetchAttendees, initialAttendees])
 
   const handleSendEmail = async (participationId: number) => {

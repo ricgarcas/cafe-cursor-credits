@@ -6,6 +6,10 @@ import { getSelectedEvent } from '@/lib/db/events'
 import { Card, CardContent } from '@/components/ui/card'
 import { DashboardAttendeesTable } from '@/components/admin/dashboard-attendees-table'
 import { GettingStarted } from '@/components/admin/getting-started'
+import { AutoRefresh } from '@/components/admin/auto-refresh'
+import { EditEventDialog } from '@/components/admin/edit-event-dialog'
+import { currentUser } from '@/lib/auth/users'
+import { eventDayLabel, formatEventDate } from '@/lib/event-date'
 import { canSendEmail } from '@/lib/emails/send-coupon-email'
 import { Users, Ticket, Gift, TrendingUp, UserCheck } from 'lucide-react'
 
@@ -72,7 +76,6 @@ function Kpi({
 }) {
   return (
     <Card className="relative overflow-hidden">
-      <div className="absolute inset-0 bg-dotted opacity-60 pointer-events-none" aria-hidden />
       <CardContent className="relative flex flex-col gap-3 py-1">
         <div className="flex items-center justify-between">
           <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -101,12 +104,16 @@ function Kpi({
 
 export default async function DashboardPage() {
   const event = await getSelectedEvent()
-  const [stats, recentAttendees, settings] = await Promise.all([
+  const [stats, recentAttendees, settings, user] = await Promise.all([
     getStats(event.id),
     getRecentAttendees(event.id),
     getSettings(),
+    currentUser(),
   ])
   const city = settings?.cityName ?? 'your city'
+  // "Cafe Cursor CDMX — Cafe Cursor" reads broken; only show non-generic names.
+  const genericEventName =
+    event.name === 'Cafe Cursor' || event.name === `Cafe Cursor ${city}`
 
   // Pool utilization (global): event-scoped distributed over the global pool
   // total would mix scopes, so measure the whole pool consistently.
@@ -130,10 +137,39 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <AutoRefresh seconds={30} />
       <div>
         <h1 className="font-display text-3xl tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">
-          Cafe Cursor <span className="font-tagline">{city}</span> — {event.name}
+        <p className="mt-1 text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>
+            Cafe Cursor <span className="font-tagline">{city}</span>
+            {genericEventName ? null : <> — {event.name}</>}
+          </span>
+          {formatEventDate(event.eventDate) ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden>·</span>
+              {formatEventDate(event.eventDate)}
+              {eventDayLabel(event.eventDate) ? (
+                <span className="rounded-full border border-border px-2 py-0.5 text-[11px] uppercase tracking-wider">
+                  {eventDayLabel(event.eventDate)}
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
+              · no date set
+            </span>
+          )}
+          {user?.role === 'admin' ? (
+            <EditEventDialog
+              event={{
+                id: event.id,
+                name: event.name,
+                eventDate: event.eventDate,
+                claimPasscode: event.claimPasscode,
+              }}
+            />
+          ) : null}
         </p>
       </div>
 
@@ -191,10 +227,17 @@ export default async function DashboardPage() {
       </div>
 
       {stats.failedEmails > 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {stats.failedEmails} email{stats.failedEmails === 1 ? '' : 's'} failed to send —{' '}
-          <Link href="/admin/attendees" className="underline underline-offset-4">review in Attendees</Link>.
-        </p>
+        <div className="flex items-center justify-between rounded-[10px] border border-destructive/40 bg-destructive/5 px-4 py-3">
+          <p className="text-sm">
+            <span className="font-medium text-destructive">
+              {stats.failedEmails} email{stats.failedEmails === 1 ? '' : 's'} failed to send.
+            </span>{' '}
+            Those attendees have a code but never got it.
+          </p>
+          <Link href="/admin/attendees" className="text-sm underline underline-offset-4 hover:text-foreground">
+            Review &amp; resend
+          </Link>
+        </div>
       ) : null}
 
       <DashboardAttendeesTable initialAttendees={recentAttendees} />

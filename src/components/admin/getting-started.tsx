@@ -15,7 +15,7 @@ type Checks = {
 }
 
 const STEPS = [
-  { key: 'eventReady', label: 'Set up your event', hint: 'Name it, set a date or passcode', href: '/admin/dashboard' },
+  { key: 'eventReady', label: 'Set up your event', hint: 'Name and date it — pencil above', href: '/admin/dashboard' },
   { key: 'hasCodes', label: 'Add credit codes', hint: 'Paste your code batch', href: '/admin/coupons' },
   { key: 'emailReady', label: 'Configure email', hint: 'Resend or SMTP', href: '/admin/settings' },
   { key: 'lumaConnected', label: 'Connect Luma', hint: 'Optional — sync your guest list', href: '/admin/luma' },
@@ -63,7 +63,7 @@ export function GettingStarted({ checks }: { checks: Checks }) {
           <li className="flex items-center gap-2 pl-8 text-sm text-muted-foreground">
             Then:{' '}
             <Link href="/admin/qr-cards" className="underline underline-offset-4">print QR cards</Link> or{' '}
-            <Link href="/claim" className="underline underline-offset-4">test the claim portal</Link>
+            <Link href="/admin/claim-portal" className="underline underline-offset-4">open the claim portal</Link>
           </li>
         </ul>
       </CardContent>
