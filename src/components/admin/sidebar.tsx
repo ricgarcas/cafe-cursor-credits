@@ -13,6 +13,7 @@ import {
   QrCode,
   CalendarDays,
   UserPlus,
+  Bot,
   ArrowRight,
   PanelLeftClose,
   PanelLeftOpen,
@@ -41,6 +42,7 @@ export const navigation = [
   { name: 'Claim portal', href: '/admin/claim-portal', icon: Sparkles },
   { name: 'QR cards', href: '/admin/qr-cards', icon: QrCode },
   { name: 'Luma', href: '/admin/luma', icon: CalendarDays },
+  { name: 'Run from Cursor (MCP)', href: '/admin/guide', icon: Bot },
   { name: 'Team', href: '/admin/team', icon: UserPlus, adminOnly: true },
   { name: 'Settings', href: '/admin/settings', icon: Settings, adminOnly: true },
 ]

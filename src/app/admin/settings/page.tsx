@@ -11,7 +11,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Loader2, Save, Check, ChevronsUpDown, Eye, EyeOff, Pencil, Lock, MapPin, Ticket, Mail, CalendarDays, KeyRound } from 'lucide-react'
+import { Loader2, Save, Check, ChevronsUpDown, Eye, EyeOff, Pencil, Lock, MapPin, Ticket, Mail, CalendarDays, Plug } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { UNCHANGED } from '@/lib/secrets'
@@ -71,7 +71,7 @@ const SECTIONS = [
   { id: 'claim', label: 'Claim portal', icon: Ticket },
   { id: 'email', label: 'Email', icon: Mail },
   { id: 'luma', label: 'Luma', icon: CalendarDays },
-  { id: 'api', label: 'API keys', icon: KeyRound },
+  { id: 'api', label: 'Connections', icon: Plug },
 ] as const
 type SectionId = (typeof SECTIONS)[number]['id']
 
@@ -647,11 +647,19 @@ export default function SettingsPage() {
           <Card className={cn(section !== 'api' && 'hidden')}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <KeyRound className="size-5" /> Connections
+                <Plug className="size-5" /> Connections
               </CardTitle>
               <CardDescription>
                 Apps connected to this deployment over MCP. Cursor signs in with your admin
-                account — no key to copy. Revoking cuts access immediately.
+                account — no key to copy. Revoking cuts access immediately.{' '}
+                <a
+                  href="/docs/cursor"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  How to connect Cursor
+                </a>
               </CardDescription>
             </CardHeader>
             <CardContent>

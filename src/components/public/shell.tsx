@@ -34,12 +34,18 @@ export function PublicShell({
   tagline,
   children,
   footer = true,
+  width = 'form',
 }: {
   eyebrow?: string
   title: ReactNode
   tagline?: string
   children: ReactNode
   footer?: boolean
+  /**
+   * `form` is the login/claim width. `wide` is for guides, which run two
+   * columns on desktop — at form width a JSON snippet wraps mid-line.
+   */
+  width?: 'form' | 'wide'
 }) {
   return (
     <div className="relative min-h-screen flex flex-col bg-background text-foreground">
@@ -50,7 +56,12 @@ export function PublicShell({
       </div>
 
       <main className="relative z-10 flex-1 flex items-center justify-center px-6 md:px-8 py-12 md:py-20">
-        <div className="w-full max-w-md flex flex-col items-center">
+        <div
+          className={
+            'w-full flex flex-col items-center ' +
+            (width === 'wide' ? 'max-w-6xl' : 'max-w-md')
+          }
+        >
           <CursorCube className="size-12 mb-4 opacity-90" />
           {eyebrow ? (
             <span className="mb-3 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">

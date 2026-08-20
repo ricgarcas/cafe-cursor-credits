@@ -20,9 +20,10 @@ cards, sync Luma guest lists, and email codes in bulk.
 ## Use it from Cursor (MCP)
 
 This deployment ships its own MCP server, so an ambassador can set up and
-run an event by describing what they want.
+run an event by describing what they want instead of clicking through the
+dashboard.
 
-Add it to `~/.cursor/mcp.json` — no key to copy:
+Add it to `~/.cursor/mcp.json` — there is no key to paste:
 
 ```json
 {
@@ -34,21 +35,28 @@ Add it to `~/.cursor/mcp.json` — no key to copy:
 }
 ```
 
-Click **Connect** in Cursor. It opens your deployment's own sign-in page,
+Then hit **Connect** in Cursor. It opens your deployment's own sign-in page,
 you log in with your **admin account** — the same email and password as the
-dashboard — and approve the permissions. That is the whole setup.
+dashboard — and approve the permissions.
 
-There is no "Sign in with Cursor" here and no cursor.com account involved:
-this deployment is its own authorization server, and the token it issues is
-tied to your admin user row. Revoke it any time under
-**Settings → Connections**, and that Cursor install stops working
-immediately.
+> There is no "Sign in with Cursor" and no cursor.com account involved. This
+> deployment is its own OAuth authorization server, and the access it issues
+> is tied to your admin user here. Revoke it under **Settings → Connections**
+> and that Cursor install stops working immediately.
 
-Then, in Cursor:
+Once connected:
 
 > "Set up Cafe Cursor Bogotá for Sept 12, import these 80 codes, and tell me if I'm ready."
 
 > "Sync Luma and email everyone their code."
+
+> "Is Ana checked in? How many codes are left?"
+
+Tools that send email or burn codes always show a dry-run projection first
+and wait for you to confirm — those two things cannot be taken back.
+
+**📖 [Full walkthrough at `/docs/cursor`](src/app/docs/cursor/page.tsx)** —
+served by the app itself, so every deployment carries its own guide.
 
 ### Scripts and CI
 
@@ -64,10 +72,7 @@ curl -X POST https://your-deployment.example.com/oauth/token \
 ```
 
 Machine clients are scoped like any other connection — give a nightly sync
-read access only, and it cannot email anyone.
-
-Tools that send email or burn codes always show a dry-run projection first
-and require you to confirm before anything irreversible happens.
+read access only and it cannot email anyone.
 
 ## Screenshots
 
