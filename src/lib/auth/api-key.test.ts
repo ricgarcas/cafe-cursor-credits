@@ -8,7 +8,9 @@ import {
   verifyApiKey,
   revokeApiKey,
   listApiKeys,
+  requireApiKey,
 } from './api-key'
+import { resetRateLimits } from '@/lib/rate-limit'
 
 async function seedAdmin() {
   return createUser({
@@ -86,5 +88,43 @@ describe('verifyApiKey', () => {
     await verifyApiKey(key)
     const [row] = await listApiKeys()
     expect(row.lastUsedAt).not.toBeNull()
+  })
+})
+
+function req(auth?: string) {
+  return new Request('http://localhost/api/mcp', {
+    headers: auth ? { authorization: auth } : {},
+  })
+}
+
+describe('requireApiKey', () => {
+  beforeEach(async () => {
+    await db.delete(apiKeys)
+    await db.delete(users)
+    resetRateLimits()
+  })
+
+  it('401s with no Authorization header', async () => {
+    const gate = await requireApiKey(req())
+    expect('response' in gate && gate.response.status).toBe(401)
+  })
+
+  it('401s on an unknown key', async () => {
+    const gate = await requireApiKey(req('Bearer cck_live_nope'))
+    expect('response' in gate && gate.response.status).toBe(401)
+  })
+
+  it('resolves a valid key', async () => {
+    const admin = await seedAdmin()
+    const { key } = await createApiKey({ name: 'k', role: 'admin', createdBy: admin.id })
+    const gate = await requireApiKey(req(`Bearer ${key}`))
+    expect('key' in gate).toBe(true)
+  })
+
+  it('403s a host key when admin is required', async () => {
+    const admin = await seedAdmin()
+    const { key } = await createApiKey({ name: 'k', role: 'host', createdBy: admin.id })
+    const gate = await requireApiKey(req(`Bearer ${key}`), { role: 'admin' })
+    expect('response' in gate && gate.response.status).toBe(403)
   })
 })

@@ -1,9 +1,11 @@
 import 'server-only'
 import bcrypt from 'bcryptjs'
+import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
 import { apiKeys, type ApiKey } from '@/lib/db/schema'
+import { rateLimit, tooManyRequests } from '@/lib/rate-limit'
 
 const SALT_ROUNDS = 10
 const PREFIX = 'cck_live_'
@@ -66,4 +68,29 @@ export async function revokeApiKey(id: number): Promise<boolean> {
 
 export async function listApiKeys(): Promise<ApiKey[]> {
   return db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt))
+}
+
+/**
+ * MCP counterpart to requireUser(). Returns `{ key }` on success, or a
+ * NextResponse the caller should return directly.
+ */
+export async function requireApiKey(
+  request: Request,
+  opts?: { role?: 'admin' },
+): Promise<{ key: ApiKey } | { response: NextResponse }> {
+  const header = request.headers.get('authorization') ?? ''
+  const raw = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
+  if (!raw) {
+    return { response: NextResponse.json({ error: 'Missing API key' }, { status: 401 }) }
+  }
+  if (!rateLimit(`mcp:${raw.slice(0, 13)}`)) return { response: tooManyRequests() }
+
+  const key = await verifyApiKey(raw)
+  if (!key) {
+    return { response: NextResponse.json({ error: 'Invalid API key' }, { status: 401 }) }
+  }
+  if (opts?.role === 'admin' && key.role !== 'admin') {
+    return { response: NextResponse.json({ error: 'Admin access required' }, { status: 403 }) }
+  }
+  return { key }
 }
