@@ -31,17 +31,23 @@ export const users = sqliteTable(
 )
 
 /**
- * Bearer credentials for the MCP server. Agents can't hold a session cookie,
- * so keys are the parallel auth path. Only the bcrypt hash is stored.
+ * OAuth 2.1 clients. Cursor self-registers via RFC 7591 dynamic client
+ * registration (public, no secret, PKCE). Confidential clients — created by an
+ * admin in Settings — carry a hashed secret and use the client_credentials
+ * grant for CI and cron, which have no browser to complete an auth code flow.
  */
-export const apiKeys = sqliteTable(
-  'api_keys',
+export const oauthClients = sqliteTable(
+  'oauth_clients',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
+    clientId: text('client_id').notNull(),
+    clientSecretHash: text('client_secret_hash'),
     name: text('name').notNull(),
-    keyHash: text('key_hash').notNull(),
-    keyPrefix: text('key_prefix').notNull(),
-    role: text('role', { enum: ['admin', 'host'] }).notNull().default('admin'),
+    redirectUris: text('redirect_uris').notNull().default('[]'),
+    grantTypes: text('grant_types').notNull().default('authorization_code,refresh_token'),
+    scope: text('scope').notNull().default('cafecursor:read'),
+    /** Confidential clients are admin-made; public ones arrive via open DCR. */
+    isConfidential: integer('is_confidential', { mode: 'boolean' }).notNull().default(false),
     createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
     lastUsedAt: text('last_used_at'),
     revokedAt: text('revoked_at'),
@@ -50,12 +56,80 @@ export const apiKeys = sqliteTable(
       .default(sql`(CURRENT_TIMESTAMP)`),
   },
   (t) => ({
-    prefixIdx: index('api_keys_prefix_idx').on(t.keyPrefix),
+    clientIdIdx: uniqueIndex('oauth_clients_client_id_unique').on(t.clientId),
   }),
 )
 
-export type ApiKey = typeof apiKeys.$inferSelect
-export type NewApiKey = typeof apiKeys.$inferInsert
+/**
+ * Authorization codes. Single-use, 60s TTL, always PKCE-bound. `resource` is
+ * carried through from the authorize request so the minted token can be
+ * audience-bound to it (RFC 8707).
+ */
+export const oauthAuthCodes = sqliteTable(
+  'oauth_auth_codes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    codeHash: text('code_hash').notNull(),
+    clientId: text('client_id').notNull(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    scope: text('scope').notNull(),
+    resource: text('resource'),
+    codeChallenge: text('code_challenge').notNull(),
+    codeChallengeMethod: text('code_challenge_method').notNull().default('S256'),
+    expiresAt: text('expires_at').notNull(),
+    consumedAt: text('consumed_at'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (t) => ({
+    codeHashIdx: uniqueIndex('oauth_auth_codes_hash_unique').on(t.codeHash),
+  }),
+)
+
+/**
+ * Access and refresh tokens. Opaque random strings stored only as SHA-256
+ * hashes, the same shape as users.resetTokenHash.
+ *
+ * `audience` is the canonical MCP URI the token was minted for. The resource
+ * server MUST reject a token whose audience is not itself — that is the
+ * confused-deputy defence, and the loudest MUST in the MCP auth spec.
+ *
+ * `familyId` ties an access/refresh pair to its grant so that replaying a
+ * rotated refresh token can revoke the entire family.
+ */
+export const oauthTokens = sqliteTable(
+  'oauth_tokens',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    tokenHash: text('token_hash').notNull(),
+    type: text('type', { enum: ['access', 'refresh'] }).notNull(),
+    familyId: text('family_id').notNull(),
+    clientId: text('client_id').notNull(),
+    /** Null for client_credentials tokens, which act as the app, not a person. */
+    userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    scope: text('scope').notNull(),
+    audience: text('audience').notNull(),
+    expiresAt: text('expires_at').notNull(),
+    revokedAt: text('revoked_at'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (t) => ({
+    tokenHashIdx: uniqueIndex('oauth_tokens_hash_unique').on(t.tokenHash),
+    familyIdx: index('oauth_tokens_family_idx').on(t.familyId),
+  }),
+)
+
+export type OAuthClient = typeof oauthClients.$inferSelect
+export type NewOAuthClient = typeof oauthClients.$inferInsert
+export type OAuthAuthCode = typeof oauthAuthCodes.$inferSelect
+export type OAuthToken = typeof oauthTokens.$inferSelect
+export type NewOAuthToken = typeof oauthTokens.$inferInsert
 
 /**
  * Inventory of Cursor credit codes the organizer has been given. Each code is
