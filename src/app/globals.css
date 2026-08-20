@@ -65,9 +65,9 @@
 :root {
   --radius: 14px;
 
-  --canvas:     oklch(0.955 0 0);         /* ~#F3F3F3 neutral light gray */
-  --background: oklch(0.955 0 0);
-  --foreground: oklch(0.18 0 0);          /* near-black */
+  --canvas:     #f8f8f8;
+  --background: #f8f8f8;
+  --foreground: #141414;
 
   --surface:    oklch(1 0 0);             /* cards: white */
   --card:       oklch(1 0 0);
@@ -93,12 +93,10 @@
   --input:      oklch(0.18 0 0 / 0.10);
   --ring:       oklch(0.18 0 0 / 0.35);
 
-  /* Monochrome — "brand" slots are aliased to foreground so legacy utilities
-     still resolve to a valid color. No chromatic accents app-wide. */
-  --brand-orange:      var(--foreground);
-  --brand-orange-soft: oklch(0.18 0 0 / 0.08);
-  --brand-green:       var(--foreground);
-  --brand-green-soft:  oklch(0.18 0 0 / 0.08);
+  --brand-orange:      #f54e00;
+  --brand-orange-soft: oklch(from #f54e00 l c h / 0.09);
+  --brand-green:       #3fa266;
+  --brand-green-soft:  oklch(from #3fa266 l c h / 0.10);
 
   --chart-1: oklch(0.18 0 0);
   --chart-2: oklch(0.38 0 0);
@@ -112,10 +110,6 @@
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.94 0 0);
 
-  /* Interactive dot-grid backdrop (react-bits DotGrid). Light theme: soft
-     mid-grey dots on gray canvas. Hex only — the component parses #rrggbb. */
-  --dot-base: #e2e2e2;
-  --dot-active: #b8b8b8;
   --sidebar-accent-foreground: oklch(0.18 0.005 60);
   --sidebar-border: oklch(0.18 0.005 60 / 0.08);
   --sidebar-ring: oklch(0.18 0.005 60 / 0.35);
@@ -123,27 +117,27 @@
 
 /* Dark theme — rich near-black with slight warmth */
 .dark {
-  --canvas:     oklch(0.135 0.004 60);    /* #0F0F10-ish */
-  --background: oklch(0.135 0.004 60);
+  --canvas:     #0a0a0a;
+  --background: #0a0a0a;
   --foreground: oklch(0.96 0 0);
 
-  --surface:    oklch(0.18 0.004 60);     /* cards */
-  --card:       oklch(0.18 0.004 60);
+  --surface:    #161616;
+  --card:       #161616;
   --card-foreground: oklch(0.96 0 0);
 
-  --popover:    oklch(0.20 0.004 60);
+  --popover:    #1a1a1a;
   --popover-foreground: oklch(0.96 0 0);
 
   --primary:    oklch(0.96 0 0);          /* white buttons in dark */
-  --primary-foreground: oklch(0.18 0.005 60);
+  --primary-foreground: #0a0a0a;
 
-  --secondary:  oklch(0.22 0.004 60);
+  --secondary:  oklch(0.22 0 0);
   --secondary-foreground: oklch(0.96 0 0);
 
-  --muted:      oklch(0.22 0.004 60);
-  --muted-foreground: oklch(0.62 0.008 70);
+  --muted:      oklch(0.22 0 0);
+  --muted-foreground: oklch(0.62 0 0);
 
-  --accent:     oklch(0.22 0.004 60);
+  --accent:     oklch(0.22 0 0);
   --accent-foreground: oklch(0.96 0 0);
 
   --destructive: oklch(0.68 0.20 27);
@@ -151,11 +145,10 @@
   --input:      oklch(1 0 0 / 0.10);
   --ring:       oklch(1 0 0 / 0.25);
 
-  /* Dark theme monochrome: brand slots aliased to foreground. */
-  --brand-orange:      var(--foreground);
-  --brand-orange-soft: oklch(1 0 0 / 0.08);
-  --brand-green:       var(--foreground);
-  --brand-green-soft:  oklch(1 0 0 / 0.08);
+  --brand-orange:      #f54e00;
+  --brand-orange-soft: oklch(from #f54e00 l c h / 0.12);
+  --brand-green:       #50d080;
+  --brand-green-soft:  oklch(from #50d080 l c h / 0.12);
 
   --chart-1: oklch(0.96 0 0);
   --chart-2: oklch(0.78 0 0);
@@ -163,18 +156,15 @@
   --chart-4: oklch(0.42 0 0);
   --chart-5: oklch(0.28 0 0);
 
-  --sidebar: oklch(0.16 0.004 60);
+  --sidebar: #101010;
   --sidebar-foreground: oklch(0.96 0 0);
   --sidebar-primary: oklch(0.96 0 0);
-  --sidebar-primary-foreground: oklch(0.18 0.005 60);
-  --sidebar-accent: oklch(0.22 0.004 60);
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: oklch(0.22 0 0);
   --sidebar-accent-foreground: oklch(0.96 0 0);
   --sidebar-border: oklch(1 0 0 / 0.08);
   --sidebar-ring: oklch(1 0 0 / 0.25);
 
-  /* Inverse dot-grid for dark theme — subtle light dots on near-black canvas. */
-  --dot-base: #3a3a3a;
-  --dot-active: #6a6a6a;
 }
 
 @layer base {
@@ -210,23 +200,6 @@
     font-family: var(--font-mono);
     letter-spacing: 0;
   }
-}
-
-/* Decorative: subtle dotted grid used on hero surfaces (matches Cursor dashboard).
-   Color is baked into the gradient — don't use currentColor, or every child
-   inheriting `color` (h1, SVGs with fill=currentColor) gets washed out. */
-.bg-dotted {
-  background-image: radial-gradient(
-    oklch(0.18 0 0 / 0.07) 1px,
-    transparent 1px
-  );
-  background-size: 20px 20px;
-}
-.dark .bg-dotted {
-  background-image: radial-gradient(
-    oklch(1 0 0 / 0.06) 1px,
-    transparent 1px
-  );
 }
 
 /* Pill utility so any element can adopt the full-round Cursor shape */

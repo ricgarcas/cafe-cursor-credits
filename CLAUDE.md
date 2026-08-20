@@ -58,13 +58,15 @@ collect-page-data.
 
 ## Aesthetic cheat sheet
 
-Cursor-inspired. **Dark-by-default but dual-themed**, warm cream in light
-mode. Flat surfaces, no shadows, subtle 1px borders, **pill buttons**.
+Cursor-inspired, tokens matched to cursor.com's live palette. **Dual
+theme**: light `#f8f8f8` / ink `#141414`; dark `#0a0a0a` chrome with
+`#161616` cards. Flat surfaces, no shadows, subtle 1px borders, **pill
+buttons**, no decorative dot grids.
 
 Type classes: `font-display` (tight Inter), `font-tagline` (Fraunces
-italic), `font-code` (JetBrains Mono). Accent tokens:
-`var(--brand-orange)`, `var(--brand-green)` with `-soft` variants for
-backgrounds.
+italic), `font-code` (JetBrains Mono). Accent tokens (sparing):
+`var(--brand-orange)` `#f54e00`, `var(--brand-green)` (`#50d080` dark /
+`#3fa266` light) with `-soft` variants for backgrounds.
 
 ## Before finishing a task
 

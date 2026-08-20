@@ -12,7 +12,6 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { CursorCube } from '@/components/brand/logo'
-import { PublicBackdrop } from '@/components/public/backdrop'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { EnterKeyHint } from '@/components/ui/enter-key-hint'
 import { ArrowLeft, Check, ChevronsUpDown, Loader2 } from 'lucide-react'
@@ -191,7 +190,6 @@ export function OnboardingWizard({ initial }: { initial: Partial<FormValues> }) 
 
   return (
     <div className="relative min-h-screen flex flex-col bg-background text-foreground">
-      <PublicBackdrop />
 
       <div className="fixed top-4 right-4 z-20">
         <ThemeToggle />
