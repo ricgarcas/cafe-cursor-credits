@@ -11,11 +11,12 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Loader2, Save, Check, ChevronsUpDown, Eye, EyeOff, Pencil, Lock, MapPin, Ticket, Mail, CalendarDays } from 'lucide-react'
+import { Loader2, Save, Check, ChevronsUpDown, Eye, EyeOff, Pencil, Lock, MapPin, Ticket, Mail, CalendarDays, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { UNCHANGED } from '@/lib/secrets'
 import { DateField } from '@/components/ui/date-field'
+import { ApiKeysManager } from '@/components/admin/api-keys-manager'
 
 // Canonical timezone list — no duplicates, Mexico City first.
 const TIMEZONES = [
@@ -70,6 +71,7 @@ const SECTIONS = [
   { id: 'claim', label: 'Claim portal', icon: Ticket },
   { id: 'email', label: 'Email', icon: Mail },
   { id: 'luma', label: 'Luma', icon: CalendarDays },
+  { id: 'api', label: 'API keys', icon: KeyRound },
 ] as const
 type SectionId = (typeof SECTIONS)[number]['id']
 
@@ -639,6 +641,21 @@ export default function SettingsPage() {
                   </FormItem>
                 )}
               />
+            </CardContent>
+          </Card>
+
+          <Card className={cn(section !== 'api' && 'hidden')}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="size-5" /> API keys
+              </CardTitle>
+              <CardDescription>
+                Connect Cursor to this deployment over MCP. Keys are shown once and can be revoked
+                at any time.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ApiKeysManager />
             </CardContent>
           </Card>
 
