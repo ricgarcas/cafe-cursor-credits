@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
-import { apiKeys, type ApiKey } from '@/lib/db/schema'
+import { apiKeys, users, type ApiKey } from '@/lib/db/schema'
 import { rateLimit, tooManyRequests } from '@/lib/rate-limit'
 
 const SALT_ROUNDS = 10
@@ -93,4 +93,15 @@ export async function requireApiKey(
     return { response: NextResponse.json({ error: 'Admin access required' }, { status: 403 }) }
   }
   return { key }
+}
+
+/** Email of the admin who created the key — where test mail should land. */
+export async function apiKeyOwnerEmail(key: ApiKey): Promise<string | null> {
+  if (!key.createdBy) return null
+  const [row] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, key.createdBy))
+    .limit(1)
+  return row?.email ?? null
 }
