@@ -198,7 +198,7 @@ export default function SettingsPage() {
       <div>
         <h1 className="font-display text-3xl tracking-tight">Settings</h1>
         <p className="mt-1 text-muted-foreground">
-          City identity, branding, and integration API keys.
+          City identity, branding, email delivery, and connected apps.
         </p>
       </div>
 

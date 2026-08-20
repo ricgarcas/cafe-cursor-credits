@@ -17,6 +17,10 @@ email, or `/claim` for instant on-screen delivery at the event.
 project a scannable claim portal on the venue screen, print branded QR
 cards, sync Luma guest lists, and email codes in bulk.
 
+**From Cursor** — the deployment ships its own MCP server, so you can set up
+and run an event by describing what you want instead of clicking through the
+dashboard.
+
 ## Use it from Cursor (MCP)
 
 This deployment ships its own MCP server, so an ambassador can set up and
@@ -55,8 +59,8 @@ Once connected:
 Tools that send email or burn codes always show a dry-run projection first
 and wait for you to confirm — those two things cannot be taken back.
 
-**📖 [Full walkthrough at `/docs/cursor`](src/app/docs/cursor/page.tsx)** —
-served by the app itself, so every deployment carries its own guide.
+**📖 Full walkthrough at `/docs/cursor`** (or `/admin/guide` once signed in) —
+served by the app itself, so every deployment carries its own copy.
 
 ### Scripts and CI
 
@@ -78,10 +82,16 @@ read access only and it cannot email anyone.
 
 |  |  |
 |---|---|
+| ![Connect Cursor](docs/screenshots/oauth-consent.png) | ![Run from Cursor](docs/screenshots/mcp-guide.png) |
+| **Connect Cursor** — OAuth consent, signed in with *your* admin account | **Run from Cursor** — the in-app MCP walkthrough at `/admin/guide` |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Attendees](docs/screenshots/attendees.png) |
 | **Dashboard** — live KPIs + recent registrations | **Attendees** — search, manage, CSV import |
-| ![QR cards](docs/screenshots/qr-cards.png) | ![Register](docs/screenshots/register.png) |
-| **QR cards** — printable, one code per card | **Register** — public, dual-themed, dot-grid backdrop |
+| ![Connections](docs/screenshots/settings.png) | ![QR cards](docs/screenshots/qr-cards.png) |
+| **Connections** — revoke a Cursor install or a machine client | **QR cards** — printable, one code per card |
+| ![Register](docs/screenshots/register.png) | ![Claim](docs/screenshots/claim.png) |
+| **Register** — public sign-up, dual-themed | **Claim** — scan at the venue, one code per person |
+
+Regenerate them against a running dev server with `npm run screenshots`.
 
 ## Tech stack
 
@@ -166,10 +176,15 @@ After deploy:
 | `/admin/dashboard` | Admin/Host | KPIs (incl. check-in), getting-started checklist, low-inventory + passcode banners, recent attendees |
 | `/admin/attendees` | Admin/Host | Event lens + "All people" community lens; edit, reassign, check-in, CSV import/export |
 | `/admin/coupons` | Admin | Shared code pool: bulk import, edit |
+| `/admin/claim-portal` | Admin/Host | Projector view: QR on screen for the room to scan |
 | `/admin/qr-cards` | Admin/Host | Print branded physical cards (city + event name) |
 | `/admin/luma` | Admin/Host | Sync Luma events into the selected event and dispatch credits |
 | `/admin/team` | Admin | Invite co-hosts (admin/host) with one-time passwords |
-| `/admin/settings` | Admin | City, integrations, API keys |
+| `/admin/settings` | Admin | City, integrations, email, connected apps |
+| `/admin/guide` | Admin/Host | How to connect Cursor and run an event from it |
+| `/docs/cursor` | Public | Same guide, readable before you have an account |
+| `/api/mcp` | OAuth token | The MCP server itself |
+| `/oauth/authorize` · `/oauth/token` · `/oauth/register` · `/oauth/revoke` | Public | OAuth 2.1 authorization server for MCP clients |
 
 Events are city-scoped: people and the coupon pool persist across events, while
 each event tracks its own registrations, check-ins, and emails. Switch the

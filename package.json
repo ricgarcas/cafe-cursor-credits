@@ -21,7 +21,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
