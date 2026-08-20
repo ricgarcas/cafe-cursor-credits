@@ -1,18 +1,18 @@
 import { createMcpHandler } from 'mcp-handler'
-import { NextResponse } from 'next/server'
-import { apiKeyOwnerEmail, requireApiKey } from '@/lib/auth/api-key'
+import { requireMcpAuth } from '@/lib/oauth/guard'
+import { tokenOwnerEmail } from '@/lib/oauth/tokens'
 import { registerReadTools } from '@/lib/mcp/tools-read'
 import { registerSetupTools } from '@/lib/mcp/tools-setup'
 import { registerOpsTools } from '@/lib/mcp/tools-ops'
-import type { ToolServer } from '@/lib/mcp/server-types'
+import { scopedServer, type ToolServer } from '@/lib/mcp/server-types'
 
 // Bulk dispatch outlives default serverless timeouts.
 export const maxDuration = 300
 
-function buildHandler(ownerEmail: string) {
+function buildHandler(ownerEmail: string, scope: string) {
   return createMcpHandler(
     (server) => {
-      const s = server as unknown as ToolServer
+      const s = scopedServer(server as unknown as ToolServer, scope)
       registerReadTools(s)
       registerSetupTools(s, ownerEmail)
       registerOpsTools(s)
@@ -32,18 +32,19 @@ function buildHandler(ownerEmail: string) {
   )
 }
 
-/** Every MCP request carries a bearer API key — agents have no session cookie. */
+/**
+ * Every MCP request carries an OAuth bearer token — agents have no session
+ * cookie. The token is minted by this app against its own users table; no
+ * external account is involved.
+ */
 async function authed(request: Request) {
-  const gate = await requireApiKey(request)
+  const gate = await requireMcpAuth(request)
   if ('response' in gate) return gate.response
-  const ownerEmail = await apiKeyOwnerEmail(gate.key)
-  if (!ownerEmail) {
-    return NextResponse.json(
-      { error: 'API key has no owner to send test mail to' },
-      { status: 400 },
-    )
-  }
-  return buildHandler(ownerEmail)(request)
+  const { token } = gate
+  // client_credentials tokens act as the app, so fall back to the configured
+  // from-address for anything that needs a human recipient.
+  const ownerEmail = (await tokenOwnerEmail(token)) ?? ''
+  return buildHandler(ownerEmail, token.scope)(request)
 }
 
 export async function GET(request: Request) {

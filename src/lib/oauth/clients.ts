@@ -131,7 +131,14 @@ export async function touchClient(clientId: string): Promise<void> {
  * once an admin has actually approved it.
  */
 export async function pruneStaleClients(now = Date.now()): Promise<number> {
-  const cutoff = new Date(now - 24 * 60 * 60 * 1000).toISOString()
+  // createdAt defaults to SQLite's CURRENT_TIMESTAMP ("YYYY-MM-DD HH:MM:SS"),
+  // so the cutoff must use that shape too. Comparing it against an ISO string
+  // silently breaks on a shared calendar day, where " " sorts before "T" and a
+  // young client reads as older than the cutoff.
+  const cutoff = new Date(now - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .replace('T', ' ')
+    .slice(0, 19)
   const rows = await db
     .delete(oauthClients)
     .where(

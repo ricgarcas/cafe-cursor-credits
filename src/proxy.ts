@@ -25,9 +25,13 @@ export async function proxy(request: NextRequest) {
 
   const isApi = pathname.startsWith('/api')
   const isBootstrapPage = pathname === '/admin-register'
+  // OAuth discovery must stay publicly readable even before an admin exists,
+  // or a client cannot learn where to authorize. /oauth/* returns proper OAuth
+  // errors of its own, so it must not be swallowed by the funnel either.
+  const isOAuth = pathname.startsWith('/.well-known/') || pathname.startsWith('/oauth/')
 
   // Bootstrap funnel: no admin yet → everything goes to /admin-register.
-  if (!isApi && !isBootstrapPage) {
+  if (!isApi && !isBootstrapPage && !isOAuth) {
     try {
       const hasAdmin = (await countUsers()) > 0
       if (!hasAdmin) {

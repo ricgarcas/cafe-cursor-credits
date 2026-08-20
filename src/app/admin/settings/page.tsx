@@ -16,7 +16,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { UNCHANGED } from '@/lib/secrets'
 import { DateField } from '@/components/ui/date-field'
-import { ApiKeysManager } from '@/components/admin/api-keys-manager'
+import { ConnectionsManager } from '@/components/admin/connections-manager'
 
 // Canonical timezone list — no duplicates, Mexico City first.
 const TIMEZONES = [
@@ -647,15 +647,15 @@ export default function SettingsPage() {
           <Card className={cn(section !== 'api' && 'hidden')}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <KeyRound className="size-5" /> API keys
+                <KeyRound className="size-5" /> Connections
               </CardTitle>
               <CardDescription>
-                Connect Cursor to this deployment over MCP. Keys are shown once and can be revoked
-                at any time.
+                Apps connected to this deployment over MCP. Cursor signs in with your admin
+                account — no key to copy. Revoking cuts access immediately.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ApiKeysManager />
+              <ConnectionsManager />
             </CardContent>
           </Card>
 

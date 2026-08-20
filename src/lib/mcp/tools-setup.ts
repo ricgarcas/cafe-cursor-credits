@@ -145,10 +145,16 @@ export function registerSetupTools(server: ToolServer, ownerEmail: string) {
       },
     },
     async (args) => {
+      // A machine token has no human behind it, so fall back to the sender
+      // address rather than mailing the empty string.
+      const existingSettings = await settingsRow()
+      const testRecipient = ownerEmail || args.from_email || existingSettings?.fromEmail || ''
       if (args.dry_run) {
         return text({
           would_set_provider: args.provider,
-          would_send_test_email_to: ownerEmail,
+          ...(testRecipient
+            ? { would_send_test_email_to: testRecipient }
+            : { test_email: 'skipped — no recipient; set from_email' }),
           confirm_token: issueConfirmToken('configure_email', args),
           note: 'Re-run with dry_run:false and this confirm_token to apply.',
         })
@@ -176,18 +182,18 @@ export function registerSetupTools(server: ToolServer, ownerEmail: string) {
         .where(eq(appSettings.id, existing.id))
         .returning()
 
-      if (!canSendEmail(row)) {
+      if (!canSendEmail(row) || !testRecipient) {
         return text({ saved: true, test_email: 'skipped — configuration is still incomplete' })
       }
       try {
         await sendAppEmail({
           settings: row,
-          to: ownerEmail,
+          to: testRecipient,
           subject: 'Cafe Cursor test email',
           html: '<p>Your email settings work. Attendees will get their credit codes from this sender.</p>',
           fromName: `Cafe Cursor ${row.cityName}`,
         })
-        return text({ saved: true, test_email: `sent to ${ownerEmail}` })
+        return text({ saved: true, test_email: `sent to ${testRecipient}` })
       } catch (e) {
         return text({
           saved: true,
