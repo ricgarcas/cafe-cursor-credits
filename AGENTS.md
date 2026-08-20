@@ -213,6 +213,12 @@ dev, swap to a verified sender in production.
   (`/api/register`, `/api/claim`, `/api/settings/public`) are the only
   exceptions and they're clearly documented.
 - ❌ **Don't open the DB at module scope** — use `db` (lazy proxy) inside handlers.
+- ❌ **Don't call a route handler from an MCP tool.** Tool handlers import
+  from `src/lib/**` directly. If a route holds logic a tool needs, extract
+  it to `src/lib` first.
+- ❌ **Don't ship a bulk-send or bulk-burn MCP tool without `dry_run` +
+  `confirm_token`.** Codes and emails cannot be taken back. No exceptions,
+  and never add a flag that skips the gate.
 - ❌ **Don't write multi-paragraph doc comments.** If the code needs a
   comment, one line explaining the *why* is enough.
 

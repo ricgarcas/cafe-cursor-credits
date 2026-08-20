@@ -17,6 +17,34 @@ email, or `/claim` for instant on-screen delivery at the event.
 project a scannable claim portal on the venue screen, print branded QR
 cards, sync Luma guest lists, and email codes in bulk.
 
+## Use it from Cursor (MCP)
+
+This deployment ships its own MCP server, so an ambassador can set up and
+run an event by describing what they want.
+
+1. Admin → Settings → **API keys** → New key. Copy it (shown once).
+2. Add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "cafe-cursor": {
+      "url": "https://your-deployment.example.com/api/mcp",
+      "headers": { "Authorization": "Bearer cck_live_..." }
+    }
+  }
+}
+```
+
+Then, in Cursor:
+
+> "Set up Cafe Cursor Bogotá for Sept 12, import these 80 codes, and tell me if I'm ready."
+
+> "Sync Luma and email everyone their code."
+
+Tools that send email or burn codes always show a dry-run projection first
+and require you to confirm before anything irreversible happens.
+
 ## Screenshots
 
 |  |  |

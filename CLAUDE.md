@@ -55,6 +55,7 @@ collect-page-data.
 | Add a public page | Use `<PublicShell>` from `src/components/public/shell.tsx` |
 | Send email | `src/lib/emails/send-coupon-email.ts` — copy the shape |
 | Touch Luma | `src/lib/luma/client.ts` + `src/lib/luma/sync.ts` |
+| Add an MCP tool | `src/lib/mcp/tools-*.ts`, register in `src/app/api/mcp/route.ts` |
 
 ## Aesthetic cheat sheet
 

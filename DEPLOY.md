@@ -136,3 +136,10 @@ turso db shell cafe-cursor < dump.sql
 ```
 
 No code changes — that's the whole point of picking libSQL.
+
+### MCP confirm tokens are in-memory
+
+Like the rate limiter, the MCP dry-run/confirm tokens live in process memory.
+On a multi-instance deployment a confirm call can land on an instance that
+never issued the token, and will be rejected as unknown. Run a single
+instance, or move both stores to a shared cache before scaling out.
