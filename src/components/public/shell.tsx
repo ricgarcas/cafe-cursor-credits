@@ -3,13 +3,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { CursorCube } from '@/components/brand/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { PublicBackdrop } from '@/components/public/backdrop'
 
 type PublicSettings = {
   city_name: string
   event_tagline?: string | null
   claim_enabled?: boolean
   claim_passcode_required?: boolean
+  setup_phrase_required?: boolean
 }
 
 export function usePublicSettings() {
@@ -44,7 +44,6 @@ export function PublicShell({
   return (
     <div className="relative min-h-screen flex flex-col bg-background text-foreground">
       {/* Fixed so it covers the whole viewport, including the footer area. */}
-      <PublicBackdrop />
 
       <div className="fixed top-4 right-4 z-20">
         <ThemeToggle />

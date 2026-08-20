@@ -14,7 +14,8 @@ Want to bring Cafe Cursor to your city? [Request one here](https://anysphere.typ
 email, or `/claim` for instant on-screen delivery at the event.
 
 **For ambassadors** — Admin dashboard to manage attendees, code inventory,
-print branded QR cards, sync Luma guest lists, and email codes in bulk.
+project a scannable claim portal on the venue screen, print branded QR
+cards, sync Luma guest lists, and email codes in bulk.
 
 ## Screenshots
 
@@ -47,9 +48,12 @@ npm run init       # generates .env.local with random secrets + creates the DB
 npm run dev
 ```
 
-Then open <http://localhost:3000/admin-register>, use the admin phrase
-printed by `npm run init` to create the first admin, and you're dropped into
-onboarding.
+Then open <http://localhost:3000/admin-register>, enter the setup phrase
+printed by `npm run init` (also in `.env.local` as `ADMIN_SETUP_PHRASE`) to
+create the first admin, and you're dropped into onboarding.
+
+Deploying somewhere public? Set `ADMIN_SETUP_PHRASE` before the app goes
+live — without it, whoever opens the site first becomes the admin.
 
 Prefer manual steps? `npm run setup` creates `.env.local`, `npm run db:push`
 creates the database tables.

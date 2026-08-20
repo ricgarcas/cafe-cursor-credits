@@ -8,6 +8,7 @@ const schema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email().max(255),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  phrase: z.string().max(255).optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -27,6 +28,16 @@ export async function POST(request: NextRequest) {
     if ((await countUsers()) > 0) {
       return NextResponse.json(
         { error: 'An admin already exists. Please sign in.' },
+        { status: 403 },
+      )
+    }
+
+    // When ADMIN_SETUP_PHRASE is set, bootstrap is gated on it — otherwise a
+    // public fresh deployment is first-come-first-admin.
+    const required = process.env.ADMIN_SETUP_PHRASE
+    if (required && parsed.data.phrase?.trim() !== required.trim()) {
+      return NextResponse.json(
+        { error: 'Wrong setup phrase. It was printed when the app was set up (ADMIN_SETUP_PHRASE).' },
         { status: 403 },
       )
     }

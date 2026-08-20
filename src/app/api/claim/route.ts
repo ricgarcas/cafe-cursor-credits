@@ -12,7 +12,7 @@ import {
   recordEmailResult,
 } from '@/lib/db/participation'
 import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
-import { rateLimit, clientIp, tooManyRequests } from '@/lib/rate-limit'
+import { rateLimit, clientIp, tooManyRequests, VENUE_WINDOWS } from '@/lib/rate-limit'
 
 const schema = z.object({
   name: z.string().min(1).max(255),
@@ -24,13 +24,14 @@ const schema = z.object({
 /** Self-service on-site claim. Idempotent per email per event. */
 export async function POST(request: NextRequest) {
   try {
-    if (!rateLimit(`claim:${clientIp(request)}`)) return tooManyRequests()
+    if (!rateLimit(`claim:${clientIp(request)}`, Date.now(), VENUE_WINDOWS)) return tooManyRequests()
     const body = await request.json().catch(() => null)
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
     const { name, email, sendEmail } = parsed.data
+    if (!rateLimit(`claim-email:${email.toLowerCase()}`)) return tooManyRequests()
 
     const [settings] = await db.select().from(appSettings).limit(1)
     if (settings && !settings.claimEnabled) {

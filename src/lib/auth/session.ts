@@ -11,10 +11,18 @@ export interface SessionData {
 }
 
 const password = process.env.SESSION_PASSWORD
-if (!password || password.length < 32) {
-  // Intentionally loud: missing cookie secret breaks auth silently.
-  // Throw lazily at request time rather than at import so `next build` works
-  // without the env var.
+
+/**
+ * Missing cookie secret makes admin sessions forgeable, so fail loudly in
+ * production. Checked at request time rather than import so `next build`
+ * works without the env var.
+ */
+export function assertSessionSecret() {
+  if (process.env.NODE_ENV === 'production' && (!password || password.length < 32)) {
+    throw new Error(
+      'SESSION_PASSWORD must be set to a random string of 32+ characters. Generate one with: openssl rand -hex 32',
+    )
+  }
 }
 
 // Secure cookies require HTTPS. On by default in prod, but overridable via
@@ -36,6 +44,7 @@ export const sessionOptions: SessionOptions = {
 }
 
 export async function getSession() {
+  assertSessionSecret()
   const cookieStore = await cookies()
   return getIronSession<SessionData>(cookieStore, sessionOptions)
 }

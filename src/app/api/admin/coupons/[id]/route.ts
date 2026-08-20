@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
-import { couponCodes } from '@/lib/db/schema'
+import { couponCodes, eventAttendees } from '@/lib/db/schema'
 import { requireUser } from '@/lib/auth/guard'
 
 const schema = z.object({ code: z.string().min(1).max(512) })
@@ -49,6 +49,18 @@ export async function DELETE(
   const couponId = Number(id)
   if (!Number.isFinite(couponId)) {
     return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+  }
+  // A code already handed to someone must not silently vanish from their row.
+  const [ref] = await db
+    .select({ id: eventAttendees.id })
+    .from(eventAttendees)
+    .where(eq(eventAttendees.couponCodeId, couponId))
+    .limit(1)
+  if (ref) {
+    return NextResponse.json(
+      { error: 'This code is assigned to an attendee. Reassign or remove them first.' },
+      { status: 400 },
+    )
   }
   await db.delete(couponCodes).where(eq(couponCodes.id, couponId))
   return NextResponse.json({ success: true })

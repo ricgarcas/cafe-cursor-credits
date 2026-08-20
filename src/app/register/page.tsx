@@ -21,7 +21,7 @@ type FormValues = z.infer<typeof schema>
 
 export default function RegisterPage() {
   const settings = usePublicSettings()
-  const [result, setResult] = useState<{ success: boolean; couponAssigned: boolean } | null>(null)
+  const [result, setResult] = useState<{ success: boolean; couponAssigned: boolean; emailStatus: 'sent' | 'failed' | 'skipped' | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -76,9 +76,11 @@ export default function RegisterPage() {
                 <div>
                   <p className="text-sm font-medium">You&apos;re in.</p>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    {result.couponAssigned
+                    {result.couponAssigned && result.emailStatus === 'sent'
                       ? 'Check your email for your Cursor credit code.'
-                      : 'You&apos;re registered. Credits will be emailed when available.'}
+                      : result.couponAssigned
+                        ? 'A code is reserved for you — the organizers will get it to you shortly.'
+                        : 'You’re registered. Credits will be emailed when available.'}
                   </p>
                 </div>
               </div>

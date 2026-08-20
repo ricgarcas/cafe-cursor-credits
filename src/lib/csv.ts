@@ -61,3 +61,13 @@ export function parseAttendeeCsv(text: string): ParseResult {
   }
   return { rows, skipped }
 }
+
+/**
+ * Quote a value for CSV export. Neutralizes spreadsheet formula injection —
+ * Excel/Sheets execute cells starting with = + - @ when opened.
+ */
+export function csvCell(value: unknown): string {
+  const s = String(value ?? '')
+  const guarded = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s
+  return `"${guarded.replace(/"/g, '""')}"`
+}

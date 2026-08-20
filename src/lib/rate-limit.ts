@@ -2,15 +2,26 @@ import { NextResponse } from 'next/server'
 
 // In-memory on purpose: this app runs as one process (Railway/Fly). If it ever
 // goes multi-instance, swap the Map for a shared store.
-const WINDOWS = [
+export type RateWindow = { limit: number; windowMs: number }
+
+const DEFAULT_WINDOWS: RateWindow[] = [
   { limit: 5, windowMs: 60_000 },
   { limit: 30, windowMs: 3_600_000 },
 ]
+
+// A whole event claims from one venue IP — per-IP limits must fit a room, not
+// a person. Pair with a per-email limit for per-person abuse.
+export const VENUE_WINDOWS: RateWindow[] = [
+  { limit: 30, windowMs: 60_000 },
+  { limit: 300, windowMs: 3_600_000 },
+]
+
 const hits = new Map<string, number[]>()
 
-export function rateLimit(key: string, now = Date.now()): boolean {
-  const stamps = (hits.get(key) ?? []).filter((t) => now - t < 3_600_000)
-  const allowed = WINDOWS.every(
+export function rateLimit(key: string, now = Date.now(), windows: RateWindow[] = DEFAULT_WINDOWS): boolean {
+  const horizon = Math.max(...windows.map((w) => w.windowMs))
+  const stamps = (hits.get(key) ?? []).filter((t) => now - t < horizon)
+  const allowed = windows.every(
     (w) => stamps.filter((t) => now - t < w.windowMs).length < w.limit,
   )
   if (allowed) stamps.push(now)

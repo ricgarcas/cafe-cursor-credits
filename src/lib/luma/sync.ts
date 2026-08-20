@@ -199,6 +199,8 @@ export async function dispatchLumaCoupons(localEventId: number) {
         .limit(1)
       if (!coupon) continue
       try {
+        // Resend allows ~2 req/s — pace bulk sends so big guest lists don't 429.
+        if (emailed > 0) await new Promise((r) => setTimeout(r, 600))
         await sendCouponEmail({
           settings,
           attendee: { name: person.name, email: person.email },

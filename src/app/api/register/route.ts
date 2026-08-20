@@ -11,7 +11,7 @@ import {
   recordEmailResult,
 } from '@/lib/db/participation'
 import { sendCouponEmail, canSendEmail } from '@/lib/emails/send-coupon-email'
-import { rateLimit, clientIp, tooManyRequests } from '@/lib/rate-limit'
+import { rateLimit, clientIp, tooManyRequests, VENUE_WINDOWS } from '@/lib/rate-limit'
 
 const schema = z.object({
   name: z.string().min(1).max(255),
@@ -20,13 +20,14 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    if (!rateLimit(`register:${clientIp(request)}`)) return tooManyRequests()
+    if (!rateLimit(`register:${clientIp(request)}`, Date.now(), VENUE_WINDOWS)) return tooManyRequests()
     const body = await request.json().catch(() => null)
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
     const { name, email } = parsed.data
+    if (!rateLimit(`register-email:${email.toLowerCase()}`)) return tooManyRequests()
 
     const event = await getActiveEvent()
     const person = await findOrCreatePerson({ name, email })
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
 
     const coupon = await reserveCouponForParticipation(participation.id)
     let couponAssigned = false
+    let emailStatus: 'sent' | 'failed' | 'skipped' | null = null
 
     if (coupon) {
       couponAssigned = true
@@ -60,21 +62,29 @@ export async function POST(request: NextRequest) {
             fromName: `Cafe Cursor ${settings.cityName}`,
           })
           await recordEmailResult(participation.id, 'sent')
+          emailStatus = 'sent'
         } catch (e) {
           console.error('email send failed', e)
           await recordEmailResult(participation.id, 'failed', e instanceof Error ? e.message : String(e))
+          emailStatus = 'failed'
         }
       } else {
         await recordEmailResult(participation.id, 'skipped')
+        emailStatus = 'skipped'
       }
     }
 
+    // Never claim "check your email" unless the send actually succeeded.
     return NextResponse.json({
       success: true,
       couponAssigned,
-      message: couponAssigned
-        ? 'Registration successful! Check your email for your code.'
-        : 'Registration successful!',
+      emailStatus,
+      message:
+        couponAssigned && emailStatus === 'sent'
+          ? 'Registration successful! Check your email for your code.'
+          : couponAssigned
+            ? 'Registration successful! A code is reserved for you.'
+            : 'Registration successful!',
     })
   } catch (e) {
     console.error('register error', e)

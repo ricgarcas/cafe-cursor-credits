@@ -12,18 +12,20 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Loader2 } from 'lucide-react'
-import { PublicShell } from '@/components/public/shell'
+import { PublicShell, usePublicSettings } from '@/components/public/shell'
 import { EnterKeyHint } from '@/components/ui/enter-key-hint'
 
 const schema = z.object({
   name: z.string().min(1, 'Required').max(255),
   email: z.string().email('Enter a valid email').max(255),
   password: z.string().min(6, 'At least 6 characters'),
+  phrase: z.string().max(255).optional(),
 })
 
 type FormValues = z.infer<typeof schema>
 
 export default function AdminRegisterPage() {
+  const settings = usePublicSettings()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -31,7 +33,7 @@ export default function AdminRegisterPage() {
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     mode: 'onChange',
-    defaultValues: { name: '', email: '', password: '' },
+    defaultValues: { name: '', email: '', password: '', phrase: '' },
   })
 
   const onSubmit = async (data: FormValues) => {
@@ -104,6 +106,21 @@ export default function AdminRegisterPage() {
                   </FormItem>
                 )}
               />
+              {settings.setup_phrase_required && (
+                <FormField
+                  control={form.control}
+                  name="phrase"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Setup phrase</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Printed by npm run setup" autoComplete="off" className="font-code" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <Button
                 type="submit"
                 disabled={loading || !form.formState.isValid}

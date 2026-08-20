@@ -7,29 +7,32 @@ const DEFAULTS = {
   city_name: 'Cafe Cursor',
   timezone: 'America/Mexico_City',
   language: 'en',
-  brand_accent: 'orange' as const,
   event_tagline: null,
   claim_enabled: true,
   claim_passcode_required: false,
 }
 
+const withEnv = (o: object) => ({
+  ...o,
+  setup_phrase_required: Boolean(process.env.ADMIN_SETUP_PHRASE),
+})
+
 export async function GET() {
   try {
     await ensureDefaultSettings()
     const [row] = await db.select().from(appSettings).limit(1)
-    if (!row) return NextResponse.json(DEFAULTS)
+    if (!row) return NextResponse.json(withEnv(DEFAULTS))
     const event = await getActiveEvent()
-    return NextResponse.json({
+    return NextResponse.json(withEnv({
       city_name: row.cityName,
       timezone: row.timezone,
       language: row.language,
-      brand_accent: row.brandAccent,
       event_tagline: row.eventTagline,
       claim_enabled: row.claimEnabled,
       claim_passcode_required: Boolean(event.claimPasscode),
-    })
+    }))
   } catch (e) {
     console.error('public settings error', e)
-    return NextResponse.json(DEFAULTS)
+    return NextResponse.json(withEnv(DEFAULTS))
   }
 }

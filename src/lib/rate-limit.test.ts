@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { rateLimit, resetRateLimits, clientIp } from './rate-limit'
+import { rateLimit, resetRateLimits, clientIp, VENUE_WINDOWS } from './rate-limit'
 
 describe('rateLimit', () => {
   beforeEach(() => resetRateLimits())
@@ -33,5 +33,27 @@ describe('rateLimit', () => {
   it('clientIp takes the first forwarded hop', () => {
     const req = new Request('http://x', { headers: { 'x-forwarded-for': '9.9.9.9, 10.0.0.1' } })
     expect(clientIp(req)).toBe('9.9.9.9')
+  })
+})
+
+describe('custom windows', () => {
+  it('venue windows allow a room of claims from one IP', () => {
+    resetRateLimits()
+    const t0 = 4_000_000
+    let allowed = 0
+    for (let i = 0; i < 40; i++) {
+      if (rateLimit('claim:venue-ip', t0 + i * 100, VENUE_WINDOWS)) allowed++
+    }
+    expect(allowed).toBe(30) // per-minute venue cap, not the default 5
+  })
+
+  it('default windows still bind other keys', () => {
+    resetRateLimits()
+    const t0 = 5_000_000
+    let allowed = 0
+    for (let i = 0; i < 10; i++) {
+      if (rateLimit('login:ip', t0 + i * 100)) allowed++
+    }
+    expect(allowed).toBe(5)
   })
 })

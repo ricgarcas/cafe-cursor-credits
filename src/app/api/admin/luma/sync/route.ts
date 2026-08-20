@@ -6,6 +6,9 @@ import { syncLumaGuests, dispatchLumaCoupons } from '@/lib/luma/sync'
 import { getSelectedEvent } from '@/lib/db/events'
 import { requireUser } from '@/lib/auth/guard'
 
+// Sync + dispatch of a big guest list outlives default serverless timeouts.
+export const maxDuration = 300
+
 const schema = z.object({
   eventApiId: z.string().min(1),
   dispatch: z.boolean().optional().default(false),

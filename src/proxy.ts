@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getIronSession } from 'iron-session'
-import { sessionOptions, type SessionData } from '@/lib/auth/session'
+import { assertSessionSecret, sessionOptions, type SessionData } from '@/lib/auth/session'
 import { countUsers } from '@/lib/auth/users'
 
 /**
@@ -48,6 +48,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/onboarding')
   if (!protectedPath) return NextResponse.next()
 
+  assertSessionSecret()
   const res = NextResponse.next()
   const session = await getIronSession<SessionData>(request, res, sessionOptions)
   if (!session.userId) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseAttendeeCsv } from './csv'
+import { csvCell, parseAttendeeCsv } from './csv'
 
 describe('parseAttendeeCsv', () => {
   it('parses a headered CSV', () => {
@@ -58,5 +58,24 @@ describe('parseAttendeeCsv', () => {
 
   it('returns an error for empty files', () => {
     expect(parseAttendeeCsv('').error).toBe('Empty file')
+  })
+})
+
+describe('csvCell', () => {
+  it('quotes and escapes embedded quotes', () => {
+    expect(csvCell('say "hi"')).toBe('"say ""hi"""')
+  })
+
+  it('neutralizes formula-leading characters', () => {
+    expect(csvCell('=1+2')).toBe('"\'=1+2"')
+    expect(csvCell('+52 555')).toBe('"\'+52 555"')
+    expect(csvCell('@handle')).toBe('"\'@handle"')
+    expect(csvCell('-2')).toBe('"\'-2"')
+  })
+
+  it('passes ordinary values through', () => {
+    expect(csvCell('Ada')).toBe('"Ada"')
+    expect(csvCell(null)).toBe('""')
+    expect(csvCell(3)).toBe('"3"')
   })
 })
