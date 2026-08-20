@@ -5,7 +5,7 @@ import { randomBytes } from 'crypto'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
 import { apiKeys, users, type ApiKey } from '@/lib/db/schema'
-import { rateLimit, tooManyRequests } from '@/lib/rate-limit'
+import { MCP_WINDOWS, rateLimit, tooManyRequests } from '@/lib/rate-limit'
 
 const SALT_ROUNDS = 10
 const PREFIX = 'cck_live_'
@@ -83,7 +83,9 @@ export async function requireApiKey(
   if (!raw) {
     return { response: NextResponse.json({ error: 'Missing API key' }, { status: 401 }) }
   }
-  if (!rateLimit(`mcp:${raw.slice(0, 13)}`)) return { response: tooManyRequests() }
+  if (!rateLimit(`mcp:${raw.slice(0, 13)}`, Date.now(), MCP_WINDOWS)) {
+    return { response: tooManyRequests() }
+  }
 
   const key = await verifyApiKey(raw)
   if (!key) {

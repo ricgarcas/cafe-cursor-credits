@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { rateLimit, resetRateLimits, clientIp, VENUE_WINDOWS } from './rate-limit'
+import { rateLimit, resetRateLimits, clientIp, VENUE_WINDOWS, MCP_WINDOWS } from './rate-limit'
 
 describe('rateLimit', () => {
   beforeEach(() => resetRateLimits())
@@ -55,5 +55,28 @@ describe('custom windows', () => {
       if (rateLimit('login:ip', t0 + i * 100)) allowed++
     }
     expect(allowed).toBe(5)
+  })
+})
+
+describe('MCP windows', () => {
+  it('lets one agent turn fire many tool calls back to back', () => {
+    resetRateLimits()
+    const t0 = 6_000_000
+    let allowed = 0
+    // A setup turn is easily a dozen calls in a couple of seconds.
+    for (let i = 0; i < 20; i++) {
+      if (rateLimit('mcp:cck_live_abcd', t0 + i * 50, MCP_WINDOWS)) allowed++
+    }
+    expect(allowed).toBe(20)
+  })
+
+  it('still bounds a runaway agent loop', () => {
+    resetRateLimits()
+    const t0 = 7_000_000
+    let allowed = 0
+    for (let i = 0; i < 100; i++) {
+      if (rateLimit('mcp:cck_live_abcd', t0 + i * 50, MCP_WINDOWS)) allowed++
+    }
+    expect(allowed).toBe(60)
   })
 })

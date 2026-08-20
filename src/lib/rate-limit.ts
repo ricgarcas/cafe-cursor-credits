@@ -16,6 +16,13 @@ export const VENUE_WINDOWS: RateWindow[] = [
   { limit: 300, windowMs: 3_600_000 },
 ]
 
+// One agent turn ("set up my city") fires several tool calls back to back, so
+// human-sized windows would 429 mid-setup. Still bounded against a runaway loop.
+export const MCP_WINDOWS: RateWindow[] = [
+  { limit: 60, windowMs: 60_000 },
+  { limit: 600, windowMs: 3_600_000 },
+]
+
 const hits = new Map<string, number[]>()
 
 export function rateLimit(key: string, now = Date.now(), windows: RateWindow[] = DEFAULT_WINDOWS): boolean {
