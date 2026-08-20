@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { AdminSidebar } from '@/components/admin/sidebar'
 import { AdminHeader } from '@/components/admin/header'
+import { AdminContent, SidebarProvider } from '@/components/admin/sidebar-context'
 import { currentUser } from '@/lib/auth/users'
 import { db, ensureDefaultSettings } from '@/lib/db/client'
 import { appSettings } from '@/lib/db/schema'
@@ -19,12 +20,18 @@ export default async function AdminLayout({
   if (!settings || !settings.onboarded) redirect('/onboarding')
 
   return (
-    <div className="min-h-screen bg-background">
-      <AdminSidebar user={{ email: user.email, name: user.name, role: user.role }} city={settings.cityName} />
-      <div className="lg:pl-64">
-        <AdminHeader user={{ email: user.email, name: user.name }} />
-        <main className="p-6 md:p-8">{children}</main>
+    <SidebarProvider>
+      <div className="min-h-screen bg-background">
+        <AdminSidebar
+          user={{ email: user.email, name: user.name, role: user.role }}
+          city={settings.cityName}
+          claimEnabled={settings.claimEnabled}
+        />
+        <AdminContent>
+          <AdminHeader user={{ email: user.email, name: user.name, role: user.role }} />
+          <main className="p-6 md:p-8">{children}</main>
+        </AdminContent>
       </div>
-    </div>
+    </SidebarProvider>
   )
 }
