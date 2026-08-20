@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import QRCode from 'qrcode'
 import type { CouponCode } from '@/lib/db/schema'
+
+type CouponRow = CouponCode & { assigned_to: { name: string; email: string } | null }
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -25,21 +28,50 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, CheckCircle2, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, CheckCircle2, Upload, QrCode, Copy, Check, ExternalLink } from 'lucide-react'
 import { format } from 'date-fns'
 
+function redeemUrl(code: string): string {
+  if (/^https?:\/\//i.test(code)) return code
+  return `https://cursor.com/referral?code=${encodeURIComponent(code)}`
+}
+
 export function CouponManagement() {
-  const [coupons, setCoupons] = useState<CouponCode[]>([])
+  const [coupons, setCoupons] = useState<CouponRow[]>([])
   const [loading, setLoading] = useState(true)
   const [newCode, setNewCode] = useState('')
-  const [editing, setEditing] = useState<CouponCode | null>(null)
+  const [editing, setEditing] = useState<CouponRow | null>(null)
   const [editCode, setEditCode] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [bulkCodes, setBulkCodes] = useState('')
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [qrFor, setQrFor] = useState<CouponRow | null>(null)
+  const [qrData, setQrData] = useState('')
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 9
+
+  // Dark-on-white always — phone cameras scan that reliably in any app theme.
+  useEffect(() => {
+    if (!qrFor) return
+    setQrData('')
+    QRCode.toDataURL(redeemUrl(qrFor.code), {
+      margin: 1,
+      width: 512,
+      color: { dark: '#111111', light: '#FFFFFF' },
+      errorCorrectionLevel: 'M',
+    })
+      .then(setQrData)
+      .catch(() => toast.error('Could not render the QR'))
+  }, [qrFor])
+
+  const copyToClipboard = async (value: string, which: 'code' | 'link') => {
+    await navigator.clipboard.writeText(value)
+    setCopied(which)
+    toast.success(which === 'code' ? 'Code copied' : 'Link copied')
+    setTimeout(() => setCopied(null), 2000)
+  }
 
   const fetchCoupons = useCallback(async () => {
     setLoading(true)
@@ -218,6 +250,7 @@ export function CouponManagement() {
                 <TableRow>
                   <TableHead>Code</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Assigned to</TableHead>
                   <TableHead>Used at</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -240,6 +273,13 @@ export function CouponManagement() {
                         </Badge>
                       )}
                     </TableCell>
+                    <TableCell className="text-sm">
+                      {c.assigned_to ? (
+                        <span title={c.assigned_to.email}>{c.assigned_to.name}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {c.usedAt ? format(new Date(c.usedAt), 'MMM d, HH:mm') : '—'}
                     </TableCell>
@@ -247,6 +287,14 @@ export function CouponManagement() {
                       {c.createdAt ? format(new Date(c.createdAt), 'MMM d') : ''}
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setQrFor(c)}
+                        title="Show QR"
+                      >
+                        <QrCode className="size-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -304,6 +352,50 @@ export function CouponManagement() {
         </CardContent>
       </Card>
 
+      <Dialog open={Boolean(qrFor)} onOpenChange={(o) => !o && setQrFor(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Show this to the attendee</DialogTitle>
+            <DialogDescription>
+              Scanning the QR opens the redeem link with the code applied.
+            </DialogDescription>
+          </DialogHeader>
+          {qrFor && (
+            <div className="flex flex-col items-center gap-4">
+              <div className="rounded-[14px] border border-border bg-white p-3">
+                {qrData ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={qrData} alt={`QR code for ${qrFor.code}`} className="size-56" />
+                ) : (
+                  <div className="size-56" />
+                )}
+              </div>
+              <div className="font-code text-sm break-all text-center select-all">{qrFor.code}</div>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => copyToClipboard(qrFor.code, 'code')}>
+                  {copied === 'code' ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  Copy code
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => copyToClipboard(redeemUrl(qrFor.code), 'link')}>
+                  {copied === 'link' ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  Copy link
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <a href={redeemUrl(qrFor.code)} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-4" /> Open
+                  </a>
+                </Button>
+              </div>
+              {qrFor.isUsed && (
+                <p className="text-xs text-muted-foreground text-center">
+                  This code is marked as used{qrFor.assigned_to ? ` by ${qrFor.assigned_to.name}` : ''}{qrFor.usedAt ? ` (${format(new Date(qrFor.usedAt), 'MMM d, HH:mm')})` : ''} — only share it with the person it was assigned to.
+                </p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
@@ -331,7 +423,6 @@ function StatCard({
 }) {
   return (
     <Card className="relative overflow-hidden">
-      <div className="absolute inset-0 bg-dotted opacity-60 pointer-events-none" aria-hidden />
       <CardContent className="relative flex flex-col gap-2 py-1">
         <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
           {label}

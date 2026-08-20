@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
+import { toast } from 'sonner'
 import QRCode from 'qrcode'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,8 +28,11 @@ export function QrCardsClient({
   city: string
   eventName?: string
 }) {
+  const router = useRouter()
   const { resolvedTheme } = useTheme()
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [printedIds, setPrintedIds] = useState<number[] | null>(null)
+  const [marking, setMarking] = useState(false)
   const [perPage, setPerPage] = useState(9)
   const [limit, setLimit] = useState(Math.min(codes.length, 9))
   const [cutStack, setCutStack] = useState(true)
@@ -376,7 +381,14 @@ export function QrCardsClient({
               <div className="h-px bg-border" />
 
               <div className="flex flex-col gap-1.5">
-                <Button className="w-full" onClick={() => window.print()} disabled={visible.length === 0}>
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    window.print()
+                    setPrintedIds(visible.map((c) => c.id))
+                  }}
+                  disabled={visible.length === 0}
+                >
                   <Printer className="size-4" /> Print / Save PDF
                 </Button>
                 <p className="text-center text-[11px] text-muted-foreground">
@@ -384,6 +396,42 @@ export function QrCardsClient({
                     ? 'Nothing to print'
                     : `${visible.length} ${visible.length === 1 ? 'card' : 'cards'} · ${pages} ${pages === 1 ? 'page' : 'pages'} (${cols}×${rows})`}
                 </p>
+
+                {printedIds && printedIds.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-2 rounded-[10px] border border-border px-3 py-2.5">
+                    <p className="text-xs leading-snug text-muted-foreground">
+                      Printed cards leave with attendees. Mark these codes as
+                      distributed so the online claim portal can&apos;t hand
+                      them out again.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={marking}
+                      onClick={async () => {
+                        setMarking(true)
+                        try {
+                          const res = await fetch('/api/admin/coupons/mark-printed', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ids: printedIds }),
+                          })
+                          const json = await res.json().catch(() => ({}))
+                          if (!res.ok) throw new Error(json.error || 'Failed')
+                          toast.success(`${json.marked} codes marked as distributed`)
+                          setPrintedIds(null)
+                          router.refresh()
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Failed to mark codes')
+                        } finally {
+                          setMarking(false)
+                        }
+                      }}
+                    >
+                      Mark {printedIds.length} as distributed
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

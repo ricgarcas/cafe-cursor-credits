@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { desc, inArray } from 'drizzle-orm'
+import { desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
-import { couponCodes } from '@/lib/db/schema'
+import { attendees, couponCodes, eventAttendees } from '@/lib/db/schema'
 import { requireUser } from '@/lib/auth/guard'
 
 export async function GET() {
@@ -10,10 +10,24 @@ export async function GET() {
   if ('response' in gate) return gate.response
 
   const rows = await db
-    .select()
+    .select({
+      coupon: couponCodes,
+      holderName: attendees.name,
+      holderEmail: attendees.email,
+    })
     .from(couponCodes)
+    .leftJoin(eventAttendees, eq(eventAttendees.couponCodeId, couponCodes.id))
+    .leftJoin(attendees, eq(attendees.id, eventAttendees.attendeeId))
     .orderBy(desc(couponCodes.createdAt))
-  return NextResponse.json({ coupons: rows })
+  // One row per coupon — keep the first holder if several events share a code.
+  const seen = new Map<number, (typeof rows)[number]>()
+  for (const r of rows) if (!seen.has(r.coupon.id)) seen.set(r.coupon.id, r)
+  return NextResponse.json({
+    coupons: Array.from(seen.values()).map((r) => ({
+      ...r.coupon,
+      assigned_to: r.holderName ? { name: r.holderName, email: r.holderEmail } : null,
+    })),
+  })
 }
 
 const singleSchema = z.object({ code: z.string().min(1).max(512) })
